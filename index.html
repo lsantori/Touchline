@@ -1,0 +1,1532 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Touchline Session Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: tactics-board workspace. Saved plans | session editor (timeline + drill blocks) | drill library */
+:root {
+  --bg: #eef2ee;
+  --surface: #ffffff;
+  --sunk: #e4eae5;
+  --ink: #142019;
+  --muted: #56655c;
+  --line: #d3dcd5;
+  --accent: #17603d;
+  --accent-ink: #ffffff;
+  --grass: #2f7a4c;
+  --grass-2: #36854f;
+  --chalk: #f4f7f2;
+  --warmup: #c98a16;
+  --technical: #2a72b5;
+  --tactical: #7a4fb5;
+  --game: #1d8a50;
+  --cooldown: #5f7d8c;
+  --team-a: #2f6fe0;
+  --team-b: #e0412f;
+  --team-n: #f4c534;
+  --team-gk: #ff8a1f;
+  --cone: #ff9f1a;
+  --over: #b93a24;
+  --ok: #1d8a50;
+  --display: "Barlow Condensed", "Arial Narrow", Arial, sans-serif;
+  --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1411; --surface: #16201a; --sunk: #111915; --ink: #e3eae5; --muted: #93a49a; --line: #29362f;
+    --accent: #52c287; --accent-ink: #06130c; --grass: #1f5a37; --grass-2: #23633d; --chalk: #e9f1ea;
+    --warmup: #e6a73a; --technical: #5c9ee0; --tactical: #a582dc; --game: #4fc283; --cooldown: #8eaab8;
+    --over: #f07a62; --ok: #4fc283; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1411; --surface: #16201a; --sunk: #111915; --ink: #e3eae5; --muted: #93a49a; --line: #29362f;
+  --accent: #52c287; --accent-ink: #06130c; --grass: #1f5a37; --grass-2: #23633d; --chalk: #e9f1ea;
+  --warmup: #e6a73a; --technical: #5c9ee0; --tactical: #a582dc; --game: #4fc283; --cooldown: #8eaab8;
+  --over: #f07a62; --ok: #4fc283; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--body); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.top {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between;
+  padding-block: 14px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-bottom: 1px solid var(--line); background: var(--surface);
+}
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand h1 { margin: 0; font: 700 26px/1 var(--display); letter-spacing: .02em; text-transform: uppercase; }
+.brand span { color: var(--muted); font-size: 13px; }
+.top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.status { font-size: 12px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 12px; cursor: pointer; font-weight: 600; font-size: 14px; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--over); }
+.btn:disabled { opacity: .55; cursor: wait; }
+.icon-btn { border: 0; background: transparent; padding: 4px 7px; border-radius: 5px; cursor: pointer; color: var(--muted); font-size: 15px; line-height: 1; }
+.icon-btn:hover { background: var(--sunk); color: var(--ink); }
+
+.app {
+  display: grid; grid-template-columns: 230px minmax(0, 1fr) 300px; gap: 20px; align-items: start;
+  padding-block: 20px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  max-width: 1480px; margin: 0 auto;
+}
+.eyebrow { font: 600 12px/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+
+/* Saved plans */
+.plans { position: sticky; top: 16px; display: grid; gap: 6px; }
+.plan-list { display: grid; gap: 4px; }
+.plan-item { text-align: left; border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 8px 10px; cursor: pointer; display: grid; gap: 2px; }
+.plan-item:hover { background: var(--sunk); }
+.plan-item.active { background: var(--surface); border-color: var(--line); }
+.plan-item strong { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-item small { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
+
+/* Editor */
+.editor { display: grid; gap: 18px; min-width: 0; }
+.sheet { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 16px; }
+.title-input { border: 0; border-bottom: 2px solid var(--line); background: transparent; font: 700 34px/1.1 var(--display); text-transform: uppercase; letter-spacing: .01em; padding: 2px 0 6px; width: 100%; }
+.title-input:focus { outline: none; border-color: var(--accent); }
+.meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field > span { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.input, .field select, .field textarea {
+  width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 7px 9px; min-width: 0;
+}
+.field textarea { resize: vertical; min-height: 64px; line-height: 1.4; }
+.input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+
+
+/* Timeline */
+.timeline { display: grid; gap: 8px; }
+.tl-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.tl-total { font: 500 14px var(--mono); font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 11px/1 var(--body); letter-spacing: .08em; text-transform: uppercase; padding: 4px 8px; border-radius: 99px; margin-left: 8px; border: 1px solid currentColor; }
+.pill.ok { color: var(--ok); } .pill.over { color: var(--over); } .pill.under { color: var(--warmup); }
+.bar { position: relative; display: flex; height: 34px; border-radius: 6px; overflow: hidden; background: var(--sunk); }
+.seg { display: flex; align-items: center; padding: 0 6px; min-width: 0; color: #fff; font: 600 12px var(--body); white-space: nowrap; overflow: hidden; border-right: 2px solid var(--surface); }
+.seg span { overflow: hidden; text-overflow: ellipsis; }
+.target-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+/* Blocks */
+.blocks { display: grid; gap: 12px; }
+.block { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 12px; }
+.block-head { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
+.clock { font: 500 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.phase-select { border: 0; border-radius: 99px; padding: 5px 10px; font: 600 12px var(--body); letter-spacing: .06em; text-transform: uppercase; color: #fff; cursor: pointer; }
+.name-input { border: 0; background: transparent; font: 600 18px var(--body); padding: 4px 2px; min-width: 0; width: 100%; border-bottom: 1px solid transparent; }
+.name-input:focus { outline: none; border-color: var(--accent); }
+.mins { display: flex; align-items: center; gap: 4px; font: 500 13px var(--mono); color: var(--muted); }
+.mins input { width: 56px; text-align: right; font: 500 15px var(--mono); padding: 5px 6px; }
+.block-actions { display: flex; gap: 0; }
+.block-body { display: grid; grid-template-columns: minmax(0, 280px) minmax(0, 1fr); gap: 14px; }
+.pitch-col { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.notes-col { display: grid; gap: 12px; min-width: 0; }
+.pitch { width: 100%; max-width: 100%; height: auto; aspect-ratio: 3 / 2; display: block; border-radius: 6px; }
+.pitch-btn { position: relative; display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 6px; }
+.pitch-cap { position: absolute; right: 6px; bottom: 6px; background: rgba(8, 18, 12, .74); color: #fff; font-size: 11px; font-weight: 600; letter-spacing: .03em; padding: 3px 8px; border-radius: 4px; }
+.pitch-btn:hover .pitch-cap, .pitch-btn:focus-visible .pitch-cap { background: var(--accent); color: var(--accent-ink); }
+.drill-dg .pitch { border-radius: 5px; margin-block: 4px 2px; }
+.block-foot { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 12px; }
+.add-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.blocks-empty { border: 1px dashed var(--line); border-radius: 10px; padding: 22px; text-align: center; color: var(--muted); }
+
+.kit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.kit ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.kit li { background: var(--sunk); border-radius: 5px; padding: 4px 9px; font-size: 13px; }
+.kit li b { font: 500 13px var(--mono); margin-right: 4px; }
+
+/* Library */
+.library { position: sticky; top: 16px; display: grid; gap: 10px; max-height: calc(100vh - 32px); overflow: auto; padding-right: 2px; }
+.lib-filters { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 3px 10px; font-size: 12px; cursor: pointer; font-weight: 600; }
+.chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.drill { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; }
+.drill-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.drill h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.drill .meta-line { font: 500 11px var(--mono); color: var(--muted); }
+.drill p { margin: 0; font-size: 13px; color: var(--muted); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+
+/* Diagram editor */
+.dg-overlay {
+  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
+  background: color-mix(in srgb, #050a07 62%, transparent);
+  padding: calc(12px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
+}
+.dg-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; width: min(1040px, 100%); max-height: 100%; overflow: auto; display: grid; gap: 12px; padding: 16px; }
+.dg-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.dg-title { margin: 0; font: 700 24px/1.1 var(--display); text-transform: uppercase; letter-spacing: .01em; text-wrap: balance; }
+.dg-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tool { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 4px 9px 4px 5px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.tool:hover { border-color: var(--muted); }
+.tool[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.tool svg { display: block; flex: none; border-radius: 3px; }
+.dg-sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 3px; }
+#dgSvg { width: 100%; height: auto; max-height: 62vh; aspect-ratio: 3 / 2; display: block; border-radius: 8px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.dg-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; min-height: 38px; }
+.dg-sel { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.dg-sel strong { color: var(--ink); }
+.dg-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.dg-inline .input, .dg-inline select { width: auto; max-width: 140px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+.dg-key { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 9px 14px; border-radius: 6px; font-size: 14px; font-weight: 600; }
+
+@media (max-width: 1180px) {
+  .app { grid-template-columns: 210px minmax(0, 1fr); }
+  .library { grid-column: 1 / -1; position: static; max-height: none; }
+  .lib-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+}
+@media (max-width: 820px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .plans { position: static; }
+  .plan-list { display: flex; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+  .plan-item { flex: 0 0 180px; background: var(--surface); border-color: var(--line); }
+  .plan-item.active { border-color: var(--accent); }
+  .block-body { grid-template-columns: minmax(0, 1fr); }
+  .pitch-col { max-width: 440px; }
+  .block-head { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .block-head .clock { display: none; }
+  .block-head .block-actions { grid-column: 1 / -1; justify-content: flex-end; }
+  .kit, .block-foot { grid-template-columns: minmax(0, 1fr); }
+  .title-input { font-size: 28px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .block { transition: border-color .15s; }
+}
+.block.flash { border-color: var(--accent); }
+.toast { z-index: 60; }
+
+/* Drill animation */
+.pitch-wrap { position: relative; }
+.play-btn { position: absolute; left: 6px; top: 6px; border: 0; border-radius: 4px; background: rgba(8, 18, 12, .74); color: #fff; font: 600 11px var(--body); letter-spacing: .03em; padding: 4px 8px; cursor: pointer; }
+.play-btn:hover, .play-btn:focus-visible, .play-btn.on { background: var(--accent); color: var(--accent-ink); }
+#dgStepStatus { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Share dialog */
+.share-panel { width: min(860px, 100%); }
+.share-note { margin: 0; font-size: 14px; color: var(--muted); max-width: 70ch; }
+.share-preview { background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; max-height: 58vh; overflow: auto; padding: 12px; }
+.share-preview img { display: block; width: 100%; max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 1px 4px rgba(0, 0, 0, .12); }
+.share-msg { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* View-only mode for assistant coaches */
+.readonly #newBtn, .readonly #addBlockBtn, .readonly #deleteBtn, .readonly .library, .readonly .block-actions, .readonly .pitch-cap { display: none !important; }
+.readonly .pitch-btn { cursor: default; }
+.shared .plans, .shared #backupBtn, .shared label[for=restoreInput] { display: none !important; }
+.shared .app, .readonly.shared .app { grid-template-columns: minmax(0, 1fr); }
+.readonly .phase-select:disabled { opacity: 1; cursor: default; }
+.readonly .app { grid-template-columns: 230px minmax(0, 1fr); }
+@media (max-width: 820px) { .readonly .app { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+<style>
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; font-size: 14px; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><h1>Touchline</h1><span>Session planner</span></div>
+  <div class="top-actions">
+    <span class="status" id="status">Loading…</span>
+    <button class="btn" id="backupBtn" type="button">Back up</button>
+    <label class="btn" for="restoreInput">Restore</label>
+    <input type="file" id="restoreInput" accept=".json,application/json" hidden>
+    <button class="btn" id="shareBtn" type="button">Share plan</button>
+    <button class="btn primary" id="newBtn" type="button">New plan</button>
+  </div>
+</header>
+
+<div class="app">
+  <aside class="plans" aria-label="Saved plans">
+    <p class="eyebrow">Saved plans</p>
+    <div class="plan-list" id="planList"><div class="empty">Loading saved plans…</div></div>
+  </aside>
+
+  <main class="editor">
+    <section class="sheet" aria-label="Session details">
+      <input class="title-input" id="f-title" placeholder="Session title" aria-label="Session title">
+      <div class="meta">
+        <label class="field"><span>Team</span><input class="input" id="f-team" placeholder="e.g. Rovers"></label>
+        <label class="field"><span>Age group</span>
+          <select id="f-age">
+            <option>U6</option><option>U8</option><option>U10</option><option>U12</option><option>U14</option><option>U16</option><option>U19</option><option>Senior</option>
+          </select>
+        </label>
+        <label class="field"><span>Players</span><input class="input" id="f-players" type="number" min="1" max="40"></label>
+        <label class="field"><span>Date</span><input class="input" id="f-date" type="date"></label>
+        <label class="field"><span>Length (min)</span><input class="input" id="f-duration" type="number" min="15" max="180" step="5"></label>
+        <label class="field"><span>Focus</span><input class="input" id="f-focus" list="focusList" placeholder="e.g. Playing out from the back"></label>
+      </div>
+      <datalist id="focusList">
+        <option value="Playing out from the back"><option value="Pressing and winning the ball back"><option value="Possession and switching play">
+        <option value="Finishing"><option value="1v1 attacking"><option value="1v1 defending"><option value="Crossing and attacking the box">
+        <option value="Transitions"><option value="Defensive shape"><option value="First touch and receiving"><option value="Dribbling and ball mastery">
+      </datalist>
+    </section>
+
+    <section class="timeline" aria-label="Session timeline">
+      <div class="tl-head">
+        <p class="eyebrow" style="margin:0">Session flow</p>
+        <div class="tl-total" id="tlTotal"></div>
+      </div>
+      <div class="bar" id="bar"></div>
+      <div class="legend" id="legend"></div>
+    </section>
+
+    <section class="blocks" id="blocks" aria-label="Session blocks"></section>
+    <div class="add-row">
+      <button class="btn" id="addBlockBtn" type="button">+ Add empty block</button>
+    </div>
+
+    <section class="sheet" aria-label="Kit and notes">
+      <div class="kit">
+        <div class="field"><span>Kit list</span><ul id="kitList"></ul></div>
+        <label class="field"><span>Session notes</span><textarea id="f-notes" placeholder="Injuries, absentees, reflections after the session…"></textarea></label>
+      </div>
+      <div class="add-row"><button class="btn danger" id="deleteBtn" type="button">Delete plan</button></div>
+    </section>
+  </main>
+
+  <aside class="library" aria-label="Drill library">
+    <p class="eyebrow" style="margin:0">Drill library</p>
+    <input class="input" id="libSearch" placeholder="Search drills">
+    <div class="lib-filters" id="libFilters"></div>
+    <div class="lib-list" id="libList"></div>
+  </aside>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<div class="dg-overlay" id="share" hidden role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+  <div class="dg-panel share-panel">
+    <div class="dg-head">
+      <div>
+        <p class="eyebrow" style="margin:0 0 4px">Share with your assistants</p>
+        <h2 class="dg-title" id="shareTitle"></h2>
+      </div>
+      <div class="top-actions">
+        <button class="btn primary" id="shLink" type="button">Copy link</button>
+        <button class="btn" id="shSave" type="button">Save image</button>
+        <button class="btn" id="shCopy" type="button">Copy as text</button>
+        <button class="btn" id="shClose" type="button">Close</button>
+      </div>
+    </div>
+    <p class="share-note" id="shNote">Copy the link and send it to your assistant coaches on WhatsApp or by email. They can open it on any phone or computer, read the plan and press Play on the drills. The plan travels inside the link, so it is not stored on any website. You can also save the image or copy the plan as text.</p>
+    <p class="share-msg" id="shMsg"></p>
+    <div class="share-preview"><img id="shImg" alt="Image of the full session plan"></div>
+  </div>
+</div>
+
+<div class="dg-overlay" id="dg" hidden role="dialog" aria-modal="true" aria-labelledby="dgTitle">
+  <div class="dg-panel">
+    <div class="dg-head">
+      <div>
+        <p class="eyebrow" style="margin:0 0 4px">Drill diagram</p>
+        <h2 class="dg-title" id="dgTitle"></h2>
+      </div>
+      <div class="top-actions">
+        <label class="dg-inline">Area <input class="input" id="dgAreaInput" placeholder="30x20 m"></label>
+        <button class="btn" id="dgPlay" type="button">▶ Play</button>
+        <button class="btn" id="dgRestart" type="button" hidden>Restart</button>
+        <label class="dg-inline">Speed <select id="dgSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label>
+        <button class="btn" id="dgUndo" type="button">Undo</button>
+        <button class="btn danger" id="dgClear" type="button">Clear</button>
+        <button class="btn primary" id="dgDone" type="button">Done</button>
+      </div>
+    </div>
+    <div class="dg-tools" id="dgTools"></div>
+    <svg id="dgSvg" viewBox="0 0 300 200" role="img" aria-label="Drill diagram editor"></svg>
+    <div class="dg-foot">
+      <div class="dg-sel" id="dgSel"></div>
+      <div class="dg-key"><span id="dgStepStatus"></span><span>Arrows play in step order</span><span>Delete key removes the selection</span><span>Ctrl/⌘ Z to undo</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PHASES = [
+  { id: "warmup", label: "Warm-up" },
+  { id: "technical", label: "Technical" },
+  { id: "tactical", label: "Tactical" },
+  { id: "game", label: "Game" },
+  { id: "cooldown", label: "Cool-down" },
+];
+const phaseLabel = id => (PHASES.find(p => p.id === id) || PHASES[0]).label;
+const phaseColor = id => `var(--${PHASES.some(p => p.id === id) ? id : "warmup"})`;
+
+const LIBRARY = [
+  { phase: "warmup", name: "Rondo 4v1", minutes: 12, area: "10x10 m", players: "Groups of 5", equipment: "4 cones, 1 bib, 2 balls",
+    setup: "Four players on the outside of the square keep the ball from one defender. Defender swaps on a win or after 6 passes.",
+    points: "Open body shape to receive. Pass to the far foot. Move to make a passing angle as soon as you pass." },
+  { phase: "warmup", name: "Dynamic gates", minutes: 10, area: "20x20 m", players: "Whole squad", equipment: "16 cones, 1 ball each",
+    setup: "Cone gates scattered around the area. Players dribble through as many gates as possible, adding skipping, side-steps and sprints between gates on the coach's call.",
+    points: "Head up, scan before each gate. Small touches in traffic. Increase intensity gradually." },
+  { phase: "technical", name: "Passing diamond", minutes: 15, area: "20x20 m", players: "Groups of 5–6", equipment: "4 cones, 3 balls",
+    setup: "Players on four cones in a diamond. Pass and follow. Progress to a one-two at each cone, then to playing around a mannequin.",
+    points: "Weight of pass. Receive on the back foot. Check away before checking to the ball." },
+  { phase: "technical", name: "Receiving on the half-turn", minutes: 12, area: "25x15 m", players: "Groups of 3", equipment: "6 cones, 2 balls",
+    setup: "Middle player receives from one end and turns to play to the other end. Add a passive defender after 5 minutes.",
+    points: "Scan over the shoulder before the ball arrives. Open hips. First touch away from pressure." },
+  { phase: "technical", name: "1v1 to gates", minutes: 15, area: "15x10 m", players: "Pairs", equipment: "8 cones, 1 ball per pair",
+    setup: "Attacker scores by dribbling through either of two end gates. Defender serves and closes down. Swap roles each rep.",
+    points: "Attack the defender's front foot. Change of pace after the move. Defender: low stance, show to the weaker side." },
+  { phase: "technical", name: "Lay-off and finish", minutes: 15, area: "Penalty area", players: "Groups of 6–8", equipment: "1 goal, 10 balls, 4 cones",
+    setup: "Striker checks in, lays off to a midfielder who shoots first time. Rotate positions. Add a recovering defender to progress.",
+    points: "Hit the target. Low and across the keeper. Follow in for rebounds." },
+  { phase: "tactical", name: "6v4 build-out to target zones", minutes: 20, area: "40x30 m", players: "10 + GK", equipment: "12 cones, 10 bibs, 10 balls, 1 goal",
+    setup: "GK plus back four and a pivot build out against four pressers. Score by dribbling or passing into one of two wide end zones. Pressers score in the goal.",
+    points: "Width and depth from the back line. Pivot shows on the blind side. Play forward when the press is broken." },
+  { phase: "tactical", name: "Pressing triggers 5v5+2", minutes: 18, area: "35x25 m", players: "12", equipment: "10 bibs, 2 floater bibs, 8 cones, 8 balls",
+    setup: "5v5 possession with two neutral floaters. Defending team presses on a trigger: a back pass, a poor touch or a pass to the touchline.",
+    points: "Press together, nearest player goes first. Cut off the inside pass. Win it within 6 seconds or drop off." },
+  { phase: "tactical", name: "Overload wide 3v2 to cross", minutes: 20, area: "50x40 m", players: "8 + GK", equipment: "1 goal, 8 cones, 6 bibs, 10 balls",
+    setup: "Winger, full-back and No. 8 attack two defenders in the wide channel, then cross for two runners against one centre-back.",
+    points: "Underlap or overlap to create the 2v1. Early cross when the defence is moving. Runners attack near post, far post and cut-back." },
+  { phase: "tactical", name: "Compact back four shadow play", minutes: 15, area: "Half pitch", players: "Back four + 4 attackers", equipment: "1 goal, 8 cones, 4 bibs, 6 balls",
+    setup: "Coach moves the ball between four attackers across the width. Back four shuffle, cover and drop as a unit. Go live on the whistle.",
+    points: "Keep 10–15 m between defenders. Pressure, cover, balance. Drop when the ball carrier is unpressed." },
+  { phase: "game", name: "5v5 with four goals", minutes: 20, area: "40x25 m", players: "10–12", equipment: "4 small goals, 10 bibs, 6 balls",
+    setup: "Each team attacks two small goals and defends two. Encourages switching the point of attack.",
+    points: "If one goal is blocked, switch. Look up before the first touch. Quick restarts." },
+  { phase: "game", name: "Conditioned 8v8", minutes: 25, area: "60x40 m", players: "16", equipment: "2 goals, 16 bibs, 8 cones, 6 balls",
+    setup: "Free game with one condition linked to the session focus, for example three passes before scoring or goals from a cross count double.",
+    points: "Freeze play once or twice to reinforce the focus. Let the game run otherwise." },
+  { phase: "cooldown", name: "Juggling and stretch", minutes: 8, area: "10x10 m", players: "Whole squad", equipment: "1 ball each",
+    setup: "Players juggle for personal bests, then move into light static stretches for quads, hamstrings, hips and calves.",
+    points: "Breathe and slow down. Hold each stretch 20–30 seconds." },
+  { phase: "cooldown", name: "Debrief circle", minutes: 6, area: "Centre circle", players: "Whole squad", equipment: "",
+    setup: "Players sit in a circle. Ask two questions about the focus and let players answer before the coach adds anything.",
+    points: "One thing that went well, one thing to work on. Keep it under five minutes." },
+];
+
+/* Starter diagrams for library drills. Coordinates run 0–1 across the drill area:
+   items [type, x, y, label?, rotation?], lines [type, x1, y1, x2, y2]. */
+const LIB_DG = {
+  "Rondo 4v1": { items: [["a", .5, .04], ["a", .96, .5], ["a", .5, .96], ["a", .04, .5], ["b", .5, .5], ["ball", .57, .08]],
+    lines: [["pass", .52, .08, .92, .46], ["run", .5, .5, .68, .34]] },
+  "Dynamic gates": { items: [["cone", .2, .2], ["cone", .3, .2], ["cone", .7, .22], ["cone", .8, .22], ["cone", .45, .5], ["cone", .55, .5], ["cone", .2, .78], ["cone", .3, .78], ["cone", .72, .8], ["cone", .82, .8],
+      ["a", .08, .42], ["ball", .12, .45], ["a", .62, .64], ["ball", .58, .62], ["a", .9, .45], ["ball", .9, .51]],
+    lines: [["dribble", .12, .4, .24, .24], ["dribble", .58, .6, .5, .53], ["dribble", .88, .42, .76, .26]] },
+  "Passing diamond": { items: [["cone", .5, .1], ["cone", .9, .5], ["cone", .5, .9], ["cone", .1, .5], ["a", .5, .18], ["a", .82, .5], ["a", .5, .82], ["a", .18, .5], ["a", .62, .92], ["ball", .5, .74]],
+    lines: [["pass", .5, .76, .78, .54], ["run", .56, .84, .86, .6], ["pass", .8, .46, .54, .2]] },
+  "Receiving on the half-turn": { items: [["a", .06, .5], ["ball", .11, .5], ["a", .5, .52], ["a", .94, .5], ["b", .62, .25]],
+    lines: [["pass", .1, .5, .46, .52], ["dribble", .52, .5, .64, .42], ["pass", .66, .42, .9, .49]] },
+  "1v1 to gates": { items: [["cone", 0, .3], ["cone", 0, .45], ["cone", 0, .55], ["cone", 0, .7], ["cone", 1, .3], ["cone", 1, .45], ["cone", 1, .55], ["cone", 1, .7], ["a", .15, .5], ["b", .88, .62]],
+    lines: [["pass", .86, .58, .2, .5], ["run", .88, .66, .62, .62], ["dribble", .17, .47, .95, .37]] },
+  "Lay-off and finish": { items: [["goal", .5, .02], ["gk", .5, .1], ["a", .5, .52, "9"], ["a", .5, .9, "8"], ["ball", .55, .88], ["cone", .3, .6], ["cone", .7, .6]],
+    lines: [["run", .6, .36, .53, .5], ["pass", .5, .86, .5, .57], ["pass", .48, .55, .4, .7], ["run", .48, .88, .41, .74], ["pass", .4, .68, .42, .06]] },
+  "6v4 build-out to target zones": { items: [["goal", .5, .98], ["gk", .5, .92], ["a", .1, .74], ["a", .36, .82], ["a", .64, .82], ["a", .9, .74], ["a", .5, .6, "6"],
+      ["b", .25, .66], ["b", .75, .66], ["b", .5, .46], ["b", .5, .3], ["cone", .3, 0], ["cone", .3, .15], ["cone", 0, .15], ["cone", .7, 0], ["cone", .7, .15], ["cone", 1, .15], ["ball", .45, .9]],
+    lines: [["pass", .46, .91, .38, .85], ["pass", .34, .8, .13, .76], ["dribble", .1, .7, .12, .2], ["run", .25, .66, .15, .7]] },
+  "Pressing triggers 5v5+2": { items: [["a", .15, .3], ["a", .4, .15], ["a", .7, .2], ["a", .88, .6], ["a", .3, .78], ["b", .25, .5], ["b", .52, .3], ["b", .6, .6], ["b", .78, .85], ["b", .45, .7],
+      ["n", .5, .04], ["n", .5, .96], ["ball", .84, .62]],
+    lines: [["pass", .7, .24, .85, .57], ["run", .62, .6, .8, .6], ["run", .78, .82, .86, .7], ["run", .52, .32, .68, .3]] },
+  "5v5 with four goals": { items: [["minigoal", 0, .25, "", 90], ["minigoal", 0, .75, "", 90], ["minigoal", 1, .25, "", 90], ["minigoal", 1, .75, "", 90],
+      ["a", .12, .5], ["a", .3, .2], ["a", .3, .8], ["a", .48, .4], ["a", .55, .72], ["b", .88, .5], ["b", .7, .2], ["b", .7, .8], ["b", .62, .45], ["b", .4, .6], ["ball", .52, .42]],
+    lines: [["pass", .46, .43, .32, .76], ["dribble", .32, .82, .48, .9], ["run", .55, .72, .8, .7]] },
+};
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+// When running inside the Touchline Mac app, plans and files go through the app.
+const NATIVE = window.webkit?.messageHandlers?.touchline || null;
+const SAVED_LABEL = NATIVE ? "Saved on this Mac" : "Saved in this browser";
+function persistPlans() {
+  const json = JSON.stringify(plans);
+  if (NATIVE) {
+    Promise.resolve(NATIVE.postMessage({ type: "savePlans", json })).catch(() => setStatus("Not saved: couldn't write the file"));
+    return;
+  }
+  localStorage.setItem("touchline-plans", json);
+}
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const today = () => new Date().toISOString().slice(0, 10);
+let toastTimer;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2200); }
+function setStatus(s) { $("status").textContent = readOnly ? "View only" : s; }
+
+function newPlan() {
+  return { id: uid(), title: "", team: "", ageGroup: "U12", players: 14, date: today(), duration: 75, focus: "", notes: "", blocks: [], updatedAt: Date.now() };
+}
+function blockFrom(d) {
+  return { id: uid(), phase: d.phase || "technical", name: d.name || "", minutes: Number(d.minutes) || 10, area: d.area || "", players: d.players || "",
+    equipment: d.equipment || "", setup: d.setup || "", points: d.points || "", diagram: normDiagram(d.diagram) };
+}
+
+/* ---------- state ---------- */
+let plans = [];          // saved plans from store
+let current = newPlan(); // plan in the editor
+let dirty = false;       // current has unsaved user edits since opening
+let loadedOnce = false;
+let readOnly = false;    // true for assistant coaches who can view but not edit
+
+/* ---------- storage: shared db, falling back to this browser ---------- */
+const store = {
+  mode: "local", col: null, inflight: new Map(), pending: new Map(),
+  async init() {
+    let db = null;
+    try { db = window.claude?.use ? await window.claude.use("db") : null; } catch { db = null; }
+    if (db) {
+      this.mode = "db"; this.col = db.collection("plans");
+      const timer = setTimeout(() => { if (!loadedOnce) { setStatus("Can't reach saved plans"); } }, 10000);
+      this.col.onSnapshot(snap => {
+        clearTimeout(timer);
+        plans = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+        onPlansLoaded();
+      }, err => { clearTimeout(timer); setStatus("Sync error: " + (err?.message || "unknown")); });
+    } else {
+      this.mode = "local";
+      if (Array.isArray(window.__TOUCHLINE_PLANS__)) plans = window.__TOUCHLINE_PLANS__;
+      else { try { plans = JSON.parse(localStorage.getItem("touchline-plans") || "[]"); } catch { plans = []; } }
+      onPlansLoaded();
+    }
+  },
+  save(plan) {
+    const data = JSON.parse(JSON.stringify(plan));
+    if (this.mode === "local") {
+      const i = plans.findIndex(p => p.id === plan.id);
+      if (i >= 0) plans[i] = data; else plans.push(data);
+      try { persistPlans(); setStatus(SAVED_LABEL); }
+      catch { setStatus("Not saved: browser storage is blocked"); }
+      renderPlanList();
+      return;
+    }
+    const id = plan.id;
+    if (this.inflight.get(id)) { this.pending.set(id, data); return; }
+    this.inflight.set(id, true);
+    setStatus("Saving…");
+    const { id: _omit, ...body } = data;
+    this.col.doc(id).set(body).then(() => setStatus("Saved"), e => setStatus("Not saved: " + (e?.message || e?.code || "error")))
+      .finally(() => {
+        this.inflight.set(id, false);
+        if (this.pending.has(id)) { const next = this.pending.get(id); this.pending.delete(id); this.save(next); }
+      });
+  },
+  async remove(id) {
+    if (this.mode === "local") {
+      plans = plans.filter(p => p.id !== id);
+      try { persistPlans(); } catch {}
+      renderPlanList(); return;
+    }
+    await this.col.doc(id).delete();
+  },
+};
+
+let saveTimer;
+function touch() {
+  if (readOnly) return;
+  dirty = true;
+  current.updatedAt = Date.now();
+  setStatus("Editing…");
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => store.save(current), 700);
+}
+
+function onPlansLoaded() {
+  const first = !loadedOnce;
+  loadedOnce = true;
+  if (first) {
+    setStatus(store.mode === "db" ? "Synced" : SAVED_LABEL);
+    if (!dirty && current.blocks.length === 0 && plans.length) {
+      const latest = [...plans].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+      openPlan(latest.id);
+      return;
+    }
+  }
+  renderPlanList();
+}
+
+function openPlan(id) {
+  const p = plans.find(x => x.id === id);
+  if (!p) return;
+  if (dirty) { clearTimeout(saveTimer); store.save(current); }
+  current = JSON.parse(JSON.stringify(p));
+  current.blocks = (current.blocks || []).map(b => ({ ...blockFrom(b), id: b.id || uid() }));
+  dirty = false;
+  renderAll();
+}
+
+/* ---------- rendering ---------- */
+function renderPlanList() {
+  const list = $("planList");
+  const all = [...plans];
+  if (!all.some(p => p.id === current.id)) all.push({ ...current, _unsaved: true });
+  all.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.updatedAt || 0) - (a.updatedAt || 0));
+  if (!loadedOnce) { list.innerHTML = '<div class="empty">Loading saved plans…</div>'; return; }
+  list.innerHTML = all.map(p => {
+    const mins = (p.blocks || []).reduce((s, b) => s + (Number(b.minutes) || 0), 0);
+    const title = p.id === current.id ? current.title : p.title;
+    return `<button type="button" class="plan-item ${p.id === current.id ? "active" : ""}" data-id="${esc(p.id)}">
+      <strong>${esc(title || "Untitled session")}</strong>
+      <small>${esc(p.date || "No date")} · ${esc(p.ageGroup || "")} · ${mins} min${p._unsaved ? " · new" : ""}</small></button>`;
+  }).join("") + (plans.length ? "" : '<div class="empty">Plans save automatically as you edit.</div>');
+}
+
+function renderMeta() {
+  $("f-title").value = current.title || "";
+  $("f-team").value = current.team || "";
+  $("f-age").value = current.ageGroup || "U12";
+  $("f-players").value = current.players ?? "";
+  $("f-date").value = current.date || "";
+  $("f-duration").value = current.duration ?? "";
+  $("f-focus").value = current.focus || "";
+  $("f-notes").value = current.notes || "";
+}
+
+function totalMinutes() { return current.blocks.reduce((s, b) => s + (Number(b.minutes) || 0), 0); }
+
+function renderTimeline() {
+  const total = totalMinutes();
+  const target = Number(current.duration) || 0;
+  const scale = Math.max(total, target, 1);
+  let pill = "";
+  if (target) {
+    const diff = total - target;
+    pill = diff === 0 ? '<span class="pill ok">On time</span>' : diff > 0 ? `<span class="pill over">${diff} min over</span>` : `<span class="pill under">${-diff} min left</span>`;
+  }
+  $("tlTotal").innerHTML = `${total} / ${target || "–"} min${pill}`;
+  const bar = $("bar");
+  bar.innerHTML = current.blocks.map(b => {
+    const w = (Number(b.minutes) || 0) / scale * 100;
+    return `<div class="seg" style="width:${w}%;background:${phaseColor(b.phase)}" title="${esc(b.name || phaseLabel(b.phase))} · ${b.minutes} min"><span>${esc(b.name || phaseLabel(b.phase))}</span></div>`;
+  }).join("") + (target ? `<div class="target-mark" style="left:calc(${target / scale * 100}% - 1px)" title="Target length"></div>` : "");
+  $("legend").innerHTML = PHASES.map(p => {
+    const m = current.blocks.filter(b => b.phase === p.id).reduce((s, b) => s + (Number(b.minutes) || 0), 0);
+    return `<span><i style="background:${phaseColor(p.id)}"></i>${p.label} <b style="font-family:var(--mono);font-weight:500">${m}′</b></span>`;
+  }).join("");
+  // running clock on each block
+  let t = 0;
+  current.blocks.forEach(b => {
+    const el = document.querySelector(`.block[data-id="${b.id}"] .clock`);
+    const start = t; t += Number(b.minutes) || 0;
+    if (el) el.textContent = `${fmt(start)}–${fmt(t)}`;
+  });
+}
+const fmt = m => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+
+/* ---------- drill diagrams (canvas is 300 x 200 units) ---------- */
+const W = 300, H = 200;
+const ITEM_TYPES = { a: "Attacker", b: "Defender", n: "Neutral", gk: "Goalkeeper", cone: "Cone", ball: "Ball", minigoal: "Mini goal", goal: "Goal", mannequin: "Mannequin", pole: "Pole" };
+const LINE_TYPES = { pass: "Pass", run: "Run", dribble: "Dribble" };
+const PLAYER_FILL = { a: "var(--team-a)", b: "var(--team-b)", n: "var(--team-n)", gk: "var(--team-gk)" };
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const f1 = n => Math.round(n * 10) / 10;
+const sid = () => Math.random().toString(36).slice(2, 9);
+
+function areaRect(area) {
+  const m = String(area || "").match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i);
+  const a = m ? parseFloat(m[1]) : 0, b = m ? parseFloat(m[2]) : 0;
+  if (!a || !b) return { x: 20, y: 16, w: 260, h: 168, dims: null };
+  const s = Math.min((W - 52) / a, (H - 44) / b), w = a * s, h = b * s;
+  return { x: (W - w) / 2, y: (H - h) / 2, w, h, dims: [a, b] };
+}
+function shape(t, label = "", rot = 0) {
+  switch (t) {
+    case "a": case "b": case "n": case "gk":
+      return `<circle r="7" style="fill:${PLAYER_FILL[t]}" stroke="#fff" stroke-width="1.4"/>` + (label ? `<text transform="rotate(${-rot})" text-anchor="middle" dominant-baseline="central" font-family="Barlow, sans-serif" font-weight="700" font-size="7.5" fill="${t === "n" ? "#1b1b1b" : "#fff"}">${esc(label)}</text>` : "");
+    case "cone": return `<polygon points="0,-5 -4.5,3.5 4.5,3.5" style="fill:var(--cone)" stroke="#6b3a00" stroke-width=".6"/>`;
+    case "ball": return `<circle r="3.4" fill="#fff" stroke="#1b1b1b" stroke-width=".9"/><circle r="1.1" fill="#1b1b1b"/>`;
+    case "minigoal": return `<rect x="-10" y="-3.5" width="20" height="7" fill="#fff" fill-opacity=".2" stroke="#fff" stroke-width="1.4"/>`;
+    case "goal": return `<rect x="-22" y="-6" width="44" height="12" fill="#fff" fill-opacity=".15" stroke="#fff" stroke-width="1.6"/>` +
+      Array.from({ length: 10 }, (_, i) => `<line x1="${-18 + i * 4}" y1="-6" x2="${-18 + i * 4}" y2="6" stroke="#fff" stroke-opacity=".45" stroke-width=".5"/>`).join("") +
+      `<line x1="-22" y1="0" x2="22" y2="0" stroke="#fff" stroke-opacity=".45" stroke-width=".5"/>`;
+    case "mannequin": return `<rect x="-3.5" y="-8" width="7" height="16" rx="3" fill="#1d2430" stroke="#fff" stroke-width="1"/>`;
+    case "pole": return `<ellipse cy="6" rx="3.2" ry="1.4" fill="#ffe14d"/><line y1="-9" y2="6" stroke="#ffe14d" stroke-width="2"/>`;
+  }
+  return "";
+}
+function pitchBase(area) {
+  let out = Array.from({ length: 10 }, (_, i) => `<rect x="${i * 30}" y="0" width="30" height="${H}" style="fill:${i % 2 ? "var(--grass-2)" : "var(--grass)"}"/>`).join("");
+  const r = areaRect(area), label = 'font-family="JetBrains Mono, monospace" font-size="10" style="fill:var(--chalk)"';
+  if (r.dims) {
+    out += `<rect x="${f1(r.x)}" y="${f1(r.y)}" width="${f1(r.w)}" height="${f1(r.h)}" fill="#fff" fill-opacity=".05" style="stroke:var(--chalk)" stroke-width="1.4" stroke-dasharray="5 4"/>`;
+    out += [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]].map(([x, y]) => `<g transform="translate(${f1(x)} ${f1(y)})">${shape("cone")}</g>`).join("");
+    out += `<text x="${W / 2}" y="${f1(r.y - 7)}" text-anchor="middle" ${label}>${r.dims[0]} m</text>`;
+    const lx = f1(r.x + r.w + 13);
+    out += `<text x="${lx}" y="${H / 2}" text-anchor="middle" dominant-baseline="central" transform="rotate(90 ${lx} ${H / 2})" ${label}>${r.dims[1]} m</text>`;
+  } else {
+    out += `<g opacity=".7" fill="none" style="stroke:var(--chalk)" stroke-width="1.2"><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"/><line x1="${W / 2}" y1="${r.y}" x2="${W / 2}" y2="${r.y + r.h}"/><circle cx="${W / 2}" cy="${H / 2}" r="22"/></g>`;
+    out += `<text x="${W / 2}" y="${H - 4}" text-anchor="middle" font-family="Barlow, sans-serif" font-size="10" style="fill:var(--chalk)">${esc(area || "Set an area like 30x20 m")}</text>`;
+  }
+  return out;
+}
+function itemSvg(it, i, selected) {
+  const r = it.t === "goal" ? 25 : it.t === "minigoal" ? 13 : 10;
+  return `<g${i == null ? "" : ` data-item="${i}"`} transform="translate(${f1(it.x)} ${f1(it.y)}) rotate(${it.r || 0})"><circle r="${r}" fill="#000" fill-opacity="0"/>${shape(it.t, it.label, it.r || 0)}${selected ? `<circle r="${r + 1}" fill="none" stroke="#fff" stroke-width="1" stroke-dasharray="2.5 2"/>` : ""}</g>`;
+}
+function lineSvg(l, i, selected) {
+  const dx = l.x2 - l.x1, dy = l.y2 - l.y1, len = Math.hypot(dx, dy);
+  if (len < 1) return "";
+  const ux = dx / len, uy = dy / len, head = Math.min(6.5, len * .6), bx = l.x2 - ux * head, by = l.y2 - uy * head;
+  const col = selected ? "var(--team-n)" : "#fff";
+  let d;
+  if (l.t === "dribble") {
+    const pts = [], end = Math.max(0, len - head - 3);
+    for (let s = 0; s <= end; s += 1.5) { const o = Math.sin(s / 7 * Math.PI * 2) * 2.6; pts.push(`${f1(l.x1 + ux * s - uy * o)},${f1(l.y1 + uy * s + ux * o)}`); }
+    pts.push(`${f1(bx)},${f1(by)}`);
+    d = "M" + pts.join(" L");
+  } else d = `M${f1(l.x1)},${f1(l.y1)} L${f1(bx)},${f1(by)}`;
+  const px = -uy * 3.4, py = ux * 3.4;
+  return `<g${i == null ? "" : ` data-line="${i}"`}><line x1="${f1(l.x1)}" y1="${f1(l.y1)}" x2="${f1(l.x2)}" y2="${f1(l.y2)}" stroke="#000" stroke-opacity="0" stroke-width="10"/>` +
+    `<path d="${d}" fill="none" style="stroke:${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"${l.t === "run" ? ' stroke-dasharray="4 3"' : ""}/>` +
+    `<polygon points="${f1(l.x2)},${f1(l.y2)} ${f1(bx + px)},${f1(by + py)} ${f1(bx - px)},${f1(by - py)}" style="fill:${col}"/></g>`;
+}
+function previewSvg(b) {
+  const d = b.diagram || { items: [], lines: [] };
+  return `<svg class="pitch" viewBox="0 0 ${W} ${H}" role="img" aria-label="Drill diagram, area ${esc(b.area || "not set")}">${pitchBase(b.area)}${d.lines.map(l => lineSvg(l)).join("")}${d.lines.length > 1 ? stepBadges(d) : ""}${d.items.map(it => itemSvg(it)).join("")}</svg>`;
+}
+const hasDiagram = b => !!(b.diagram && (b.diagram.items.length || b.diagram.lines.length));
+const pitchBtnInner = b => `${previewSvg(b)}<span class="pitch-cap">${hasDiagram(b) ? "Edit diagram" : "Draw the drill"}</span>`;
+function refreshPreview(b) {
+  const el = document.querySelector(`.block[data-id="${b.id}"] .pitch-btn`);
+  if (el) el.innerHTML = pitchBtnInner(b);
+  const pb = document.querySelector(`.block[data-id="${b.id}"] .play-btn`);
+  if (pb) pb.hidden = !b.diagram?.lines?.length;
+}
+function normDiagram(d) {
+  const ok = v => typeof v === "number" && isFinite(v);
+  const items = Array.isArray(d?.items) ? d.items.filter(it => it && ITEM_TYPES[it.t] && ok(+it.x) && ok(+it.y))
+    .map(it => ({ id: typeof it.id === "string" && it.id ? it.id : sid(), t: it.t, x: clamp(+it.x, 0, W), y: clamp(+it.y, 0, H), r: (+it.r || 0) % 360, label: String(it.label || "").slice(0, 3) })) : [];
+  const lines = Array.isArray(d?.lines) ? d.lines.filter(l => l && LINE_TYPES[l.t] && [l.x1, l.y1, l.x2, l.y2].every(v => ok(+v)))
+    .map(l => {
+      const o = { t: l.t, x1: clamp(+l.x1, 0, W), y1: clamp(+l.y1, 0, H), x2: clamp(+l.x2, 0, W), y2: clamp(+l.y2, 0, H) };
+      if (Number.isInteger(+l.step) && +l.step > 0 && +l.step < 100) o.step = +l.step;
+      if (typeof l.who === "string" && l.who) o.who = l.who;
+      return o;
+    }) : [];
+  return { items, lines };
+}
+// Convert a diagram given in 0–1 area coordinates (library drills) to canvas units.
+function fromNorm(d, area) {
+  if (!d) return null;
+  const r = areaRect(area);
+  const X = u => r.x + clamp(+u, -.08, 1.08) * r.w, Y = v => r.y + clamp(+v, -.08, 1.08) * r.h;
+  const items = (d.items || []).map(it => Array.isArray(it) ? { t: it[0], x: it[1], y: it[2], label: it[3] || "", r: it[4] || 0 } : it)
+    .map(it => ({ ...it, x: X(it.x), y: Y(it.y) }));
+  const lines = (d.lines || []).map(l => Array.isArray(l) ? { t: l[0], x1: l[1], y1: l[2], x2: l[3], y2: l[4] } : l)
+    .map(l => ({ t: l.t, x1: X(l.x1), y1: Y(l.y1), x2: X(l.x2), y2: Y(l.y2) }));
+  return normDiagram({ items, lines });
+}
+
+function renderBlocks() {
+  const wrap = $("blocks");
+  if (!current.blocks.length) {
+    wrap.innerHTML = `<div class="blocks-empty">No blocks yet. Add drills from the library or start with an empty block.</div>`;
+    return;
+  }
+  wrap.innerHTML = current.blocks.map((b, i) => `
+  <article class="block" data-id="${b.id}">
+    <div class="block-head">
+      <span class="clock"></span>
+      <select class="phase-select" data-f="phase" aria-label="Phase" style="background:${phaseColor(b.phase)}">
+        ${PHASES.map(p => `<option value="${p.id}" ${p.id === b.phase ? "selected" : ""}>${p.label}</option>`).join("")}
+      </select>
+      <input class="name-input" data-f="name" value="${esc(b.name)}" placeholder="Drill name" aria-label="Drill name">
+      <label class="mins"><input class="input" type="number" min="1" max="120" data-f="minutes" value="${esc(b.minutes)}" aria-label="Minutes">min</label>
+      <div class="block-actions">
+        <button class="icon-btn" data-act="up" ${i === 0 ? "disabled" : ""} title="Move up" aria-label="Move up">↑</button>
+        <button class="icon-btn" data-act="down" ${i === current.blocks.length - 1 ? "disabled" : ""} title="Move down" aria-label="Move down">↓</button>
+        <button class="icon-btn" data-act="dup" title="Duplicate" aria-label="Duplicate">⧉</button>
+        <button class="icon-btn" data-act="del" title="Remove block" aria-label="Remove block">✕</button>
+      </div>
+    </div>
+    <div class="block-body">
+      <div class="pitch-col">
+        <div class="pitch-wrap">
+          <button type="button" class="pitch-btn" data-act="diagram" aria-label="Edit drill diagram">${pitchBtnInner(b)}</button>
+          <button type="button" class="play-btn" data-act="play" aria-label="Play drill animation"${b.diagram?.lines?.length ? "" : " hidden"}>▶ Play</button>
+        </div>
+        <label class="field"><span>Area</span><input class="input" data-f="area" value="${esc(b.area)}" placeholder="30x20 m"></label>
+      </div>
+      <div class="notes-col">
+        <label class="field"><span>Organisation</span><textarea data-f="setup" rows="4" placeholder="Set-up, rules, progressions">${esc(b.setup)}</textarea></label>
+        <label class="field"><span>Coaching points</span><textarea data-f="points" rows="4" placeholder="What you'll look for and say">${esc(b.points)}</textarea></label>
+      </div>
+    </div>
+    <div class="block-foot">
+      <label class="field"><span>Players</span><input class="input" data-f="players" value="${esc(b.players)}" placeholder="Groups of 5"></label>
+      <label class="field"><span>Equipment</span><input class="input" data-f="equipment" value="${esc(b.equipment)}" placeholder="12 cones, 10 bibs, 8 balls"></label>
+    </div>
+  </article>`).join("");
+}
+
+function parseKit() {
+  const items = new Map();
+  current.blocks.forEach(b => String(b.equipment || "").split(/[,;]+/).map(s => s.trim()).filter(Boolean).forEach(part => {
+    const m = part.match(/^(\d+)\s+(.+)$/);
+    const name = (m ? m[2] : part).toLowerCase().replace(/\s+/g, " ");
+    const qty = m ? Number(m[1]) : 0;
+    items.set(name, Math.max(items.get(name) || 0, qty));
+  }));
+  return items;
+}
+function renderKit() {
+  const items = parseKit();
+  $("kitList").innerHTML = items.size
+    ? [...items].map(([n, q]) => `<li>${q ? `<b>${q}</b>` : ""}${esc(n)}</li>`).join("")
+    : '<li style="background:none;padding:0;color:var(--muted)">Add equipment to blocks to build the kit list. Quantities show the most any one block needs.</li>';
+}
+
+let libPhase = "all";
+function renderLibrary() {
+  $("libFilters").innerHTML = [{ id: "all", label: "All" }, ...PHASES].map(p =>
+    `<button type="button" class="chip ${libPhase === p.id ? "on" : ""}" data-phase="${p.id}">${p.label}</button>`).join("");
+  const q = $("libSearch").value.trim().toLowerCase();
+  const list = LIBRARY.map((d, i) => ({ d, i })).filter(({ d }) =>
+    (libPhase === "all" || d.phase === libPhase) && (!q || (d.name + " " + d.setup + " " + d.points).toLowerCase().includes(q)));
+  $("libList").innerHTML = list.length ? list.map(({ d, i }) => `
+    <div class="drill">
+      <div class="drill-top"><h3><span class="dot" style="background:${phaseColor(d.phase)}"></span>${esc(d.name)}</h3>
+      <button class="btn" type="button" data-add="${i}" style="padding:3px 10px;font-size:12px">Add</button></div>
+      <div class="meta-line">${d.minutes} min · ${esc(d.area)} · ${esc(d.players)}</div>
+      ${LIB_DG[d.name] ? `<div class="drill-dg">${previewSvg({ area: d.area, diagram: fromNorm(LIB_DG[d.name], d.area) })}</div>` : ""}
+      <p>${esc(d.setup)}</p>
+    </div>`).join("") : '<div class="empty">No drills match.</div>';
+}
+
+function renderAll() { renderMeta(); renderBlocks(); renderTimeline(); renderKit(); renderPlanList(); resetDelete(); }
+
+/* ---------- events ---------- */
+const metaMap = { "f-title": "title", "f-team": "team", "f-age": "ageGroup", "f-players": "players", "f-date": "date", "f-duration": "duration", "f-focus": "focus", "f-notes": "notes" };
+Object.entries(metaMap).forEach(([id, key]) => {
+  const el = $(id);
+  el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
+    current[key] = (key === "players" || key === "duration") ? (el.value === "" ? "" : Number(el.value)) : el.value;
+    if (key === "duration") renderTimeline();
+    if (key === "title" || key === "date" || key === "ageGroup") renderPlanList();
+    touch();
+  });
+});
+
+$("blocks").addEventListener("input", e => {
+  const f = e.target.dataset.f; if (!f) return;
+  const card = e.target.closest(".block");
+  const b = current.blocks.find(x => x.id === card.dataset.id); if (!b) return;
+  b[f] = f === "minutes" ? (Number(e.target.value) || 0) : e.target.value;
+  if (f === "phase") e.target.style.background = phaseColor(b.phase);
+  if (f === "area") refreshPreview(b);
+  if (f === "minutes" || f === "phase" || f === "name") renderTimeline();
+  if (f === "equipment") renderKit();
+  touch();
+});
+$("blocks").addEventListener("click", e => {
+  const playBtn = e.target.closest('[data-act="play"]');
+  if (playBtn) { toggleCardPlay(playBtn.closest(".block").dataset.id); return; }
+  if (readOnly) return;
+  const btn = e.target.closest("[data-act]"); if (!btn) return;
+  const id = btn.closest(".block").dataset.id;
+  const i = current.blocks.findIndex(b => b.id === id);
+  const act = btn.dataset.act;
+  if (act === "diagram") { openDiagram(id); return; }
+  if (act === "up" && i > 0) [current.blocks[i - 1], current.blocks[i]] = [current.blocks[i], current.blocks[i - 1]];
+  if (act === "down" && i < current.blocks.length - 1) [current.blocks[i + 1], current.blocks[i]] = [current.blocks[i], current.blocks[i + 1]];
+  if (act === "dup") current.blocks.splice(i + 1, 0, { ...JSON.parse(JSON.stringify(current.blocks[i])), id: uid() });
+  if (act === "del") current.blocks.splice(i, 1);
+  renderBlocks(); renderTimeline(); renderKit(); renderPlanList(); touch();
+});
+
+function addBlock(data) {
+  const b = blockFrom(data);
+  current.blocks.push(b);
+  renderBlocks(); renderTimeline(); renderKit(); renderPlanList(); touch();
+  const el = document.querySelector(`.block[data-id="${b.id}"]`);
+  if (el) { el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 900); el.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }
+}
+$("addBlockBtn").addEventListener("click", () => addBlock({ phase: "technical", minutes: 10 }));
+$("libList").addEventListener("click", e => {
+  const i = e.target.dataset.add; if (i == null) return;
+  const d = LIBRARY[i];
+  addBlock({ ...d, diagram: fromNorm(LIB_DG[d.name], d.area) });
+  toast(`Added ${d.name}`);
+});
+$("libFilters").addEventListener("click", e => { const p = e.target.dataset.phase; if (p) { libPhase = p; renderLibrary(); } });
+$("libSearch").addEventListener("input", renderLibrary);
+$("planList").addEventListener("click", e => { const b = e.target.closest(".plan-item"); if (b && b.dataset.id !== current.id) openPlan(b.dataset.id); });
+
+$("newBtn").addEventListener("click", () => {
+  if (dirty) { clearTimeout(saveTimer); store.save(current); }
+  current = newPlan(); dirty = false; renderAll(); $("f-title").focus();
+});
+
+let delArmed = false;
+function resetDelete() { delArmed = false; $("deleteBtn").textContent = "Delete plan"; }
+$("deleteBtn").addEventListener("click", async () => {
+  if (!delArmed) { delArmed = true; $("deleteBtn").textContent = "Click again to delete"; setTimeout(resetDelete, 4000); return; }
+  clearTimeout(saveTimer);
+  const id = current.id;
+  try { if (plans.some(p => p.id === id)) await store.remove(id); toast("Plan deleted"); }
+  catch (e) { toast("Couldn't delete: " + (e?.message || "error")); return; }
+  plans = plans.filter(p => p.id !== id);
+  current = newPlan(); dirty = false; renderAll();
+});
+
+function planText() {
+  const p = current, lines = [];
+  lines.push((p.title || "Training session").toUpperCase());
+  lines.push([p.team, p.ageGroup, p.date, p.players ? `${p.players} players` : "", `${totalMinutes()} min`].filter(Boolean).join(" · "));
+  if (p.focus) lines.push(`Focus: ${p.focus}`);
+  let t = 0;
+  p.blocks.forEach((b, i) => {
+    const s = t; t += Number(b.minutes) || 0;
+    lines.push("", `${i + 1}. ${phaseLabel(b.phase)}: ${b.name || "Untitled"} (${fmt(s)}–${fmt(t)}, ${b.minutes} min)`);
+    if (b.area || b.players) lines.push(`   ${[b.area, b.players].filter(Boolean).join(" · ")}`);
+    if (b.setup) lines.push(`   Organisation: ${b.setup}`);
+    if (b.points) lines.push(`   Coaching points: ${b.points}`);
+  });
+  const kit = [...parseKit()].map(([n, q]) => (q ? `${q} ${n}` : n));
+  if (kit.length) lines.push("", `Kit: ${kit.join(", ")}`);
+  if (p.notes) lines.push("", `Notes: ${p.notes}`);
+  return lines.join("\n");
+}
+function copyPlanText() { copyText(planText(), "Plan copied"); }
+function copyText(text, okMsg) {
+  if (NATIVE) { Promise.resolve(NATIVE.postMessage({ type: "copy", text })).then(() => toast(okMsg), () => toast("Couldn't copy")); return; }
+  const fallback = () => {
+    const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand("copy"); } catch {}
+    ta.remove(); toast(ok ? okMsg : "Copy is blocked here");
+  };
+  try { navigator.clipboard.writeText(text).then(() => toast(okMsg), fallback); } catch { fallback(); }
+}
+
+/* ---------- diagram editor ---------- */
+const dg = { block: null, tool: "move", sel: null, drag: null, undo: [], returnFocus: null, clearArmed: false };
+const TOOL_GROUPS = [["move"], ["a", "b", "n", "gk"], ["cone", "ball", "minigoal", "goal", "mannequin", "pole"], ["pass", "run", "dribble"]];
+const toolLabel = t => t === "move" ? "Select" : ITEM_TYPES[t] || LINE_TYPES[t];
+function toolIcon(t) {
+  const wide = t === "goal", w = wide ? 52 : 24, h = wide ? 22 : 18;
+  let inner;
+  if (t === "move") inner = `<path d="M-3.5,-6.5 L5,1 L1,1.6 L3,5.8 L1.2,6.6 L-0.7,2.5 L-3.5,5 Z" fill="#fff"/>`;
+  else if (LINE_TYPES[t]) inner = lineSvg({ t, x1: -9, y1: 4, x2: 9, y2: -4 });
+  else inner = shape(t);
+  return `<svg viewBox="${-w / 2} ${-h / 2} ${w} ${h}" width="${wide ? 38 : 22}" height="${wide ? 16 : 17}" aria-hidden="true"><rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" style="fill:var(--grass)"/>${inner}</svg>`;
+}
+function renderTools() {
+  $("dgTools").innerHTML = TOOL_GROUPS.map(g => g.map(t =>
+    `<button type="button" class="tool" data-tool="${t}" aria-pressed="${dg.tool === t}">${toolIcon(t)}<span>${toolLabel(t)}</span></button>`).join(""))
+    .join('<span class="dg-sep" aria-hidden="true"></span>');
+}
+function renderCanvas() {
+  const d = dg.block.diagram, s = dg.sel;
+  let handles = "";
+  if (s?.kind === "line" && d.lines[s.i]) {
+    const l = d.lines[s.i];
+    handles = [1, 2].map(h => `<g data-h="${h}" transform="translate(${f1(l["x" + h])} ${f1(l["y" + h])})" style="cursor:grab"><circle r="9" fill="#000" fill-opacity="0"/><circle r="4.2" fill="#fff" style="stroke:var(--ink)" stroke-width="1.2"/></g>`).join("");
+  }
+  const svg = $("dgSvg");
+  svg.innerHTML = pitchBase(dg.block.area) +
+    d.lines.map((l, i) => lineSvg(l, i, s?.kind === "line" && s.i === i)).join("") +
+    (d.lines.length > 1 ? stepBadges(d, true) : "") +
+    d.items.map((it, i) => itemSvg(it, i, s?.kind === "item" && s.i === i)).join("") + moverRing(d, s) + handles;
+  svg.style.cursor = dg.tool === "move" ? "default" : "crosshair";
+}
+function renderSel() {
+  const d = dg.block.diagram, s = dg.sel, box = $("dgSel");
+  if (s?.kind === "item" && d.items[s.i]) {
+    const it = d.items[s.i];
+    box.innerHTML = `<strong>${ITEM_TYPES[it.t]}</strong>
+      ${PLAYER_FILL[it.t] ? `<label class="dg-inline">Label <input class="input" id="dgLabel" maxlength="3" size="4" value="${esc(it.label)}" placeholder="9"></label>` : ""}
+      ${["goal", "minigoal", "mannequin"].includes(it.t) ? '<button type="button" class="btn" data-dg="rotate">Rotate</button>' : ""}
+      <button type="button" class="btn" data-dg="dup">Duplicate</button>
+      <button type="button" class="btn danger" data-dg="del">Delete</button>`;
+  } else if (s?.kind === "line" && d.lines[s.i]) {
+    const l = d.lines[s.i], types = l.t === "pass" ? ["ball"] : PLAYERS;
+    const options = d.items.map((it, i) => types.includes(it.t) ? `<option value="${esc(it.id)}" ${l.who === it.id ? "selected" : ""}>${esc(itemName(d, i))}</option>` : "").join("");
+    box.innerHTML = `<strong>Arrow</strong>
+      <label class="dg-inline">Type <select id="dgLineType">${Object.entries(LINE_TYPES).map(([k, v]) => `<option value="${k}" ${k === l.t ? "selected" : ""}>${v}</option>`).join("")}</select></label>
+      <label class="dg-inline">Step <input class="input" id="dgStep" type="number" min="1" max="99" value="${stepOf(l, s.i)}" style="width:64px"></label>
+      <label class="dg-inline">Moves <select id="dgWho"><option value="">Nearest ${l.t === "pass" ? "ball" : "player"}</option>${options}</select></label>
+      <button type="button" class="btn danger" data-dg="del">Delete</button>`;
+  } else {
+    box.innerHTML = `<span>${dg.tool === "move" ? "Click a player, piece of kit or arrow to select it. Drag to move it."
+      : LINE_TYPES[dg.tool] ? `Drag on the pitch to draw a ${LINE_TYPES[dg.tool].toLowerCase()} arrow.`
+      : `Click the pitch to place a ${ITEM_TYPES[dg.tool].toLowerCase()}. Keep clicking to add more.`}</span>`;
+  }
+}
+function snapshot() { dg.undo.push(JSON.stringify(dg.block.diagram)); if (dg.undo.length > 80) dg.undo.shift(); }
+function commitDiagram() { touch(); refreshPreview(dg.block); }
+function undoDiagram() {
+  stopAnim();
+  if (!dg.undo.length) { toast("Nothing to undo"); return; }
+  dg.block.diagram = JSON.parse(dg.undo.pop()); dg.sel = null;
+  renderCanvas(); renderSel(); commitDiagram();
+}
+function deleteSelection() {
+  const d = dg.block.diagram, s = dg.sel; if (!s) return;
+  snapshot(); (s.kind === "item" ? d.items : d.lines).splice(s.i, 1); dg.sel = null;
+  renderCanvas(); renderSel(); commitDiagram();
+}
+function resetClear() { dg.clearArmed = false; $("dgClear").textContent = "Clear"; }
+
+function openDiagram(id) {
+  if (readOnly) return;
+  stopAnim();
+  const b =current.blocks.find(x => x.id === id); if (!b) return;
+  b.diagram = normDiagram(b.diagram);
+  Object.assign(dg, { block: b, tool: hasDiagram(b) ? "move" : "a", sel: null, drag: null, undo: [], returnFocus: document.activeElement });
+  resetClear();
+  $("dgTitle").textContent = b.name || "Untitled drill";
+  $("dgAreaInput").value = b.area || "";
+  $("dg").hidden = false;
+  document.body.style.overflow = "hidden";
+  renderTools(); renderCanvas(); renderSel();
+  $("dgDone").focus();
+}
+function closeDiagram() {
+  stopAnim();
+  $("dg").hidden = true;
+  document.body.style.overflow = "";
+  if (dg.block) refreshPreview(dg.block);
+  dg.block = null; dg.drag = null;
+  dg.returnFocus?.focus?.();
+}
+
+$("dgDone").addEventListener("click", closeDiagram);
+$("dg").addEventListener("click", e => { if (e.target.id === "dg") closeDiagram(); });
+$("dgUndo").addEventListener("click", undoDiagram);
+$("dgClear").addEventListener("click", () => {
+  if (!dg.clearArmed) { dg.clearArmed = true; $("dgClear").textContent = "Click again to clear"; setTimeout(resetClear, 4000); return; }
+  resetClear(); snapshot();
+  dg.block.diagram = { items: [], lines: [] }; dg.sel = null;
+  renderCanvas(); renderSel(); commitDiagram();
+});
+$("dgAreaInput").addEventListener("input", e => {
+  const b = dg.block; b.area = e.target.value;
+  const field = document.querySelector(`.block[data-id="${b.id}"] [data-f="area"]`);
+  if (field) field.value = b.area;
+  renderCanvas(); commitDiagram();
+});
+$("dgTools").addEventListener("click", e => {
+  const b = e.target.closest("[data-tool]"); if (!b) return;
+  stopAnim();
+  dg.tool = b.dataset.tool; dg.sel = null;
+  renderTools(); renderCanvas(); renderSel();
+});
+$("dgSel").addEventListener("click", e => {
+  const act = e.target.closest("[data-dg]")?.dataset.dg, s = dg.sel; if (!act || !s) return;
+  if (act === "del") { deleteSelection(); return; }
+  const d = dg.block.diagram; snapshot();
+  if (act === "rotate") d.items[s.i].r = ((d.items[s.i].r || 0) + 90) % 360;
+  if (act === "dup") {
+    const c = { ...d.items[s.i], id: sid(), x: clamp(d.items[s.i].x + 16, 0, W), y: clamp(d.items[s.i].y + 10, 0, H) };
+    d.items.push(c); dg.sel = { kind: "item", i: d.items.length - 1 }; renderSel();
+  }
+  renderCanvas(); commitDiagram();
+});
+$("dgSel").addEventListener("input", e => {
+  const d = dg.block.diagram, s = dg.sel; if (!s) return;
+  if (e.target.id === "dgLabel" && d.items[s.i]) d.items[s.i].label = e.target.value.slice(0, 3);
+  if (e.target.id === "dgLineType" && d.lines[s.i]) {
+    d.lines[s.i].t = e.target.value; delete d.lines[s.i].who;
+    renderCanvas(); renderSel(); commitDiagram(); return;
+  }
+  if (e.target.id === "dgStep" && d.lines[s.i]) {
+    const v = parseInt(e.target.value, 10);
+    if (!(v >= 1 && v <= 99)) return;
+    d.lines.forEach((l, i) => { l.step = stepOf(l, i); });
+    d.lines[s.i].step = v;
+  }
+  if (e.target.id === "dgWho" && d.lines[s.i]) {
+    if (e.target.value) d.lines[s.i].who = e.target.value; else delete d.lines[s.i].who;
+  }
+  renderCanvas(); commitDiagram();
+});
+
+const dgSvg = $("dgSvg");
+function svgPoint(e) {
+  const p = dgSvg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY;
+  const q = p.matrixTransform(dgSvg.getScreenCTM().inverse());
+  return { x: clamp(q.x, 0, W), y: clamp(q.y, 0, H) };
+}
+dgSvg.addEventListener("pointerdown", e => {
+  if (e.button > 0 || !dg.block) return;
+  if (anim.on) { stopAnim(); return; }
+  const p = svgPoint(e), d = dg.block.diagram;
+  const h = e.target.closest("[data-h]"), it = e.target.closest("[data-item]"), ln = e.target.closest("[data-line]");
+  snapshot();
+  if (h && dg.sel?.kind === "line") {
+    dg.drag = { mode: "end", i: dg.sel.i, which: +h.dataset.h, moved: false };
+  } else if (LINE_TYPES[dg.tool]) {
+    d.lines.push({ t: dg.tool, x1: p.x, y1: p.y, x2: p.x, y2: p.y, step: d.lines.reduce((m, l, i) => Math.max(m, stepOf(l, i)), 0) + 1 });
+    dg.sel = { kind: "line", i: d.lines.length - 1 };
+    dg.drag = { mode: "end", i: dg.sel.i, which: 2, newLine: true, moved: true };
+  } else if (it) {
+    const i = +it.dataset.item;
+    dg.sel = { kind: "item", i };
+    dg.drag = { mode: "item", i, ox: p.x - d.items[i].x, oy: p.y - d.items[i].y, moved: false };
+  } else if (ITEM_TYPES[dg.tool]) {
+    d.items.push({ id: sid(), t: dg.tool, x: p.x, y: p.y, r: 0, label: "" });
+    dg.sel = { kind: "item", i: d.items.length - 1 };
+    dg.drag = { mode: "item", i: dg.sel.i, ox: 0, oy: 0, moved: true };
+  } else if (ln) {
+    dg.sel = { kind: "line", i: +ln.dataset.line };
+    dg.drag = { mode: "line", i: dg.sel.i, px: p.x, py: p.y, moved: false };
+  } else {
+    dg.undo.pop(); dg.sel = null; dg.drag = null;
+    renderCanvas(); renderSel(); return;
+  }
+  e.preventDefault();
+  try { dgSvg.setPointerCapture(e.pointerId); } catch {}
+  renderCanvas(); renderSel();
+});
+dgSvg.addEventListener("pointermove", e => {
+  const g = dg.drag; if (!g) return;
+  const p = svgPoint(e), d = dg.block.diagram;
+  if (g.mode === "item") { const it = d.items[g.i]; it.x = clamp(p.x - g.ox, 0, W); it.y = clamp(p.y - g.oy, 0, H); }
+  if (g.mode === "end") { const l = d.lines[g.i]; l["x" + g.which] = p.x; l["y" + g.which] = p.y; }
+  if (g.mode === "line") {
+    const l = d.lines[g.i];
+    const dx = clamp(p.x - g.px, -Math.min(l.x1, l.x2), W - Math.max(l.x1, l.x2));
+    const dy = clamp(p.y - g.py, -Math.min(l.y1, l.y2), H - Math.max(l.y1, l.y2));
+    l.x1 += dx; l.x2 += dx; l.y1 += dy; l.y2 += dy; g.px += dx; g.py += dy;
+  }
+  g.moved = true;
+  renderCanvas();
+});
+function endDrag() {
+  const g = dg.drag; if (!g) return;
+  dg.drag = null;
+  const d = dg.block.diagram;
+  if (g.newLine) {
+    const l = d.lines[g.i];
+    if (Math.hypot(l.x2 - l.x1, l.y2 - l.y1) < 8) { d.lines.splice(g.i, 1); dg.sel = null; dg.undo.pop(); renderCanvas(); renderSel(); return; }
+  }
+  if (!g.moved) { dg.undo.pop(); return; }
+  renderCanvas(); renderSel(); commitDiagram();
+}
+dgSvg.addEventListener("pointerup", endDrag);
+dgSvg.addEventListener("pointercancel", endDrag);
+
+document.addEventListener("keydown", e => {
+  if ($("dg").hidden) return;
+  const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName);
+  if (e.key === "Escape") {
+    e.preventDefault();
+    if (dg.sel) { dg.sel = null; renderCanvas(); renderSel(); } else closeDiagram();
+    return;
+  }
+  if (typing) return;
+  if ((e.key === "Delete" || e.key === "Backspace") && dg.sel) { e.preventDefault(); deleteSelection(); }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undoDiagram(); }
+});
+
+/* ---------- drill animation ---------- */
+// Arrows play in step order. Each arrow moves the nearest player (run, dribble) or ball (pass)
+// unless the arrow names who moves. Dribbles carry the ball with the player.
+const PLAYERS = ["a", "b", "n", "gk"];
+const stepOf = (l, i) => (Number.isInteger(l.step) && l.step > 0 ? l.step : i + 1);
+const easeInOut = t => (t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+const easeOut = t => 1 - (1 - t) * (1 - t);
+function itemName(d, idx) {
+  const it = d.items[idx];
+  const n = d.items.slice(0, idx + 1).filter(x => x.t === it.t).length;
+  return `${ITEM_TYPES[it.t]} ${n}${it.label ? ` (${it.label})` : ""}`;
+}
+function nearestIdx(items, pos, types, x, y, max) {
+  let best = -1, bd = max;
+  items.forEach((it, i) => {
+    if (!types.includes(it.t)) return;
+    const dist = Math.hypot(pos[i].x - x, pos[i].y - y);
+    if (dist < bd) { bd = dist; best = i; }
+  });
+  return best;
+}
+function planAnimation(d) {
+  const items = d.items, pos = items.map(it => ({ x: it.x, y: it.y }));
+  const lines = d.lines.map((l, i) => ({ l, i, step: stepOf(l, i) }));
+  const steps = [...new Set(lines.map(x => x.step))].sort((a, b) => a - b);
+  const phases = steps.map(stepNo => {
+    const start = pos.map(q => ({ ...q }));
+    const group = lines.filter(x => x.step === stepNo).map(({ l, i }) => {
+      const types = l.t === "pass" ? ["ball"] : PLAYERS;
+      let mover = l.who ? items.findIndex(it => it.id === l.who && types.includes(it.t)) : -1;
+      if (mover < 0) mover = nearestIdx(items, start, types, l.x1, l.y1, l.t === "pass" ? 30 : 45);
+      const carry = l.t === "dribble" && mover >= 0 ? nearestIdx(items, start, ["ball"], start[mover].x, start[mover].y, 28) : -1;
+      const len = Math.hypot(l.x2 - l.x1, l.y2 - l.y1);
+      const dur = l.t === "pass" ? Math.max(450, len * 7) : l.t === "run" ? Math.max(800, len * 15) : Math.max(900, len * 19);
+      return { l, i, mover, carry, dur };
+    });
+    group.forEach(g => {
+      const l = g.l;
+      if (l.t === "pass") { if (g.mover >= 0) pos[g.mover] = { x: l.x2, y: l.y2 }; return; }
+      if (g.mover >= 0) { const s0 = start[g.mover]; pos[g.mover] = { x: clamp(s0.x + l.x2 - l.x1, 0, W), y: clamp(s0.y + l.y2 - l.y1, 0, H) }; }
+      if (g.carry >= 0) { const c0 = start[g.carry]; pos[g.carry] = { x: clamp(c0.x + l.x2 - l.x1, 0, W), y: clamp(c0.y + l.y2 - l.y1, 0, H) }; }
+    });
+    return { step: stepNo, start, group, dur: Math.max(...group.map(g => g.dur)) };
+  });
+  return { phases };
+}
+function positionsAt(plan, pi, ms) {
+  const ph = plan.phases[pi], p = ph.start.map(q => ({ ...q })), ghosts = [];
+  ph.group.forEach(g => {
+    const l = g.l, raw = clamp(ms / g.dur, 0, 1);
+    if (l.t === "pass") {
+      const k = easeOut(raw);
+      if (g.mover >= 0) { const s0 = ph.start[g.mover]; p[g.mover] = { x: s0.x + (l.x2 - s0.x) * k, y: s0.y + (l.y2 - s0.y) * k }; }
+      else ghosts.push({ x: l.x1 + (l.x2 - l.x1) * k, y: l.y1 + (l.y2 - l.y1) * k });
+      return;
+    }
+    const k = easeInOut(raw), dx = (l.x2 - l.x1) * k, dy = (l.y2 - l.y1) * k;
+    if (g.mover >= 0) { const s0 = ph.start[g.mover]; p[g.mover] = { x: clamp(s0.x + dx, 0, W), y: clamp(s0.y + dy, 0, H) }; }
+    if (g.carry >= 0) { const c0 = ph.start[g.carry]; p[g.carry] = { x: clamp(c0.x + dx, 0, W), y: clamp(c0.y + dy, 0, H) }; }
+    else if (l.t === "dribble" && g.mover >= 0) ghosts.push({ x: p[g.mover].x + 6, y: p[g.mover].y + 5 });
+  });
+  return { p, ghosts };
+}
+function frameInner(b, plan, pi, ms) {
+  const d = b.diagram, ph = plan.phases[pi];
+  const active = new Set(ph.group.map(g => g.i));
+  const { p, ghosts } = positionsAt(plan, pi, ms);
+  return pitchBase(b.area) +
+    d.lines.map((l, i) => `<g opacity="${active.has(i) ? 1 : .28}">${lineSvg(l)}</g>`).join("") +
+    d.items.map((it, i) => itemSvg({ ...it, x: p[i].x, y: p[i].y })).join("") +
+    ghosts.map(q => itemSvg({ t: "ball", x: q.x, y: q.y })).join("");
+}
+function stepBadges(d, interactive) {
+  return d.lines.map((l, i) => {
+    const len = Math.hypot(l.x2 - l.x1, l.y2 - l.y1); if (len < 1) return "";
+    const ux = (l.x2 - l.x1) / len, uy = (l.y2 - l.y1) / len;
+    const mx = (l.x1 + l.x2) / 2 - uy * 8, my = (l.y1 + l.y2) / 2 + ux * 8;
+    return `<g${interactive ? ` data-line="${i}"` : ""} transform="translate(${f1(mx)} ${f1(my)})"><circle r="5.6" fill="#fff" stroke="#142019" stroke-width=".8"/><text text-anchor="middle" dominant-baseline="central" font-family="Barlow, sans-serif" font-weight="700" font-size="7" fill="#142019">${stepOf(l, i)}</text></g>`;
+  }).join("");
+}
+// Dashed ring on the player or ball the selected arrow will move.
+function moverRing(d, s) {
+  if (s?.kind !== "line" || !d.lines[s.i]) return "";
+  const g = planAnimation(d).phases.flatMap(ph => ph.group).find(x => x.i === s.i);
+  if (!g || g.mover < 0) return "";
+  const it = d.items[g.mover];
+  return `<circle cx="${f1(it.x)}" cy="${f1(it.y)}" r="12" fill="none" stroke="#f4c534" stroke-width="1.5" stroke-dasharray="3 2" pointer-events="none"/>`;
+}
+
+const anim = { on: false, paused: false, blockId: null, target: null, plan: null, pi: 0, ms: 0, gap: 0, hold: 0, last: 0, raf: 0, speed: 1 };
+const STEP_GAP = 300, END_HOLD = 1400;
+function animEl() {
+  if (anim.target === "editor") return $("dg").hidden ? null : $("dgSvg");
+  return document.querySelector(`.block[data-id="${anim.blockId}"] .pitch-btn svg`);
+}
+function startAnim(blockId, target) {
+  stopAnim();
+  const b = current.blocks.find(x => x.id === blockId);
+  if (!b || !b.diagram?.lines?.length) { toast("Draw some arrows first"); return; }
+  Object.assign(anim, { on: true, paused: false, blockId, target, plan: planAnimation(b.diagram), pi: 0, ms: 0, gap: 0, hold: 0, last: performance.now() });
+  updateAnimUI();
+  anim.raf = requestAnimationFrame(tickAnim);
+}
+function stopAnim() {
+  if (!anim.on) return;
+  cancelAnimationFrame(anim.raf);
+  anim.on = false; anim.paused = false;
+  if (anim.target === "editor") { if (dg.block) renderCanvas(); }
+  else { const b = current.blocks.find(x => x.id === anim.blockId); if (b) refreshPreview(b); }
+  updateAnimUI();
+}
+function tickAnim(now) {
+  if (!anim.on) return;
+  const el = animEl(), b = current.blocks.find(x => x.id === anim.blockId);
+  if (!el || !b) { anim.on = false; updateAnimUI(); return; }
+  const dt = Math.min(64, now - anim.last) * anim.speed;
+  anim.last = now;
+  const phases = anim.plan.phases, ph = phases[anim.pi];
+  if (!anim.paused) {
+    if (anim.ms < ph.dur) anim.ms = Math.min(ph.dur, anim.ms + dt);
+    else if (anim.pi < phases.length - 1) { anim.gap += dt; if (anim.gap >= STEP_GAP) { anim.gap = 0; anim.pi++; anim.ms = 0; } }
+    else { anim.hold += dt; if (anim.hold >= END_HOLD) { stopAnim(); return; } }
+  }
+  el.innerHTML = frameInner(b, anim.plan, anim.pi, anim.ms);
+  if (anim.target === "editor") $("dgStepStatus").textContent = `Step ${anim.pi + 1} of ${phases.length}`;
+  anim.raf = requestAnimationFrame(tickAnim);
+}
+function updateAnimUI() {
+  document.querySelectorAll(".play-btn").forEach(btn => {
+    const on = anim.on && anim.target === "card" && btn.closest(".block")?.dataset.id === anim.blockId;
+    btn.textContent = on ? "■ Stop" : "▶ Play";
+    btn.classList.toggle("on", on);
+  });
+  const ed = anim.on && anim.target === "editor";
+  $("dgPlay").textContent = !ed ? "▶ Play" : anim.paused ? "▶ Resume" : "❚❚ Pause";
+  $("dgRestart").hidden = !ed;
+  if (!ed) $("dgStepStatus").textContent = "";
+}
+function toggleCardPlay(id) {
+  if (anim.on && anim.target === "card" && anim.blockId === id) stopAnim();
+  else startAnim(id, "card");
+}
+$("dgPlay").addEventListener("click", () => {
+  if (anim.on && anim.target === "editor") { anim.paused = !anim.paused; anim.last = performance.now(); updateAnimUI(); return; }
+  dg.sel = null; renderSel();
+  startAnim(dg.block.id, "editor");
+});
+$("dgRestart").addEventListener("click", () => startAnim(dg.block.id, "editor"));
+$("dgSpeed").addEventListener("change", e => { anim.speed = Number(e.target.value) || 1; });
+
+/* ---------- view-only mode ---------- */
+function lockFields() {
+  document.querySelectorAll(".editor input, .editor textarea").forEach(el => { el.readOnly = true; });
+  document.querySelectorAll(".editor select").forEach(el => { el.disabled = true; });
+}
+function setReadOnly() {
+  readOnly = true;
+  clearTimeout(saveTimer);
+  document.body.classList.add("readonly");
+  setStatus("View only");
+  lockFields();
+}
+new MutationObserver(() => { if (readOnly) lockFields(); }).observe($("blocks"), { childList: true });
+
+/* ---------- share: plan image ---------- */
+const EXPORT_COLORS = { "--grass": "#2f7a4c", "--grass-2": "#36854f", "--chalk": "#f4f7f2", "--team-a": "#2f6fe0", "--team-b": "#e0412f",
+  "--team-n": "#f4c534", "--team-gk": "#ff8a1f", "--cone": "#ff9f1a", "--ink": "#142019" };
+const PHASE_HEX = { warmup: "#c98a16", technical: "#2a72b5", tactical: "#7a4fb5", game: "#1d8a50", cooldown: "#5f7d8c" };
+function loadImage(src) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; }); }
+function svgDataUrl(b) {
+  const s = previewSvg(b).replace(/var\((--[\w-]+)\)/g, (m, k) => EXPORT_COLORS[k] || "#000")
+    .replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" ');
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(s);
+}
+function wrapLines(ctx, text, maxW) {
+  const out = [];
+  String(text || "").split(/\n/).forEach(par => {
+    const words = par.split(/\s+/).filter(Boolean);
+    if (!words.length) { out.push(""); return; }
+    let line = "";
+    words.forEach(w => { const t = line ? line + " " + w : w; if (ctx.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t; });
+    out.push(line);
+  });
+  return out;
+}
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+async function buildPlanImage() {
+  try { await document.fonts?.ready; } catch {}
+  const p = current, CW = 1200, pad = 48, DW = 420, DH = 280, gap = 28, bw = CW - pad * 2;
+  const C = { bg: "#ffffff", ink: "#142019", muted: "#56655c", line: "#d3dcd5", accent: "#17603d" };
+  const F = { body: "Barlow, Arial, sans-serif", disp: '"Barlow Condensed", "Arial Narrow", Arial, sans-serif', mono: '"JetBrains Mono", Menlo, monospace' };
+  const imgs = await Promise.all(p.blocks.map(b => hasDiagram(b) ? loadImage(svgDataUrl(b)).catch(() => null) : null));
+  const draw = ctx => {
+    ctx.textBaseline = "top";
+    const text = (s, x, y, font, color) => { ctx.font = font; ctx.fillStyle = color; ctx.fillText(s, x, y); };
+    const para = (body, x, y, w) => { ctx.font = `400 17px ${F.body}`; wrapLines(ctx, body, w).forEach(l => { text(l, x, y, ctx.font, C.ink); y += 24; }); return y; };
+    let y = pad;
+    ctx.font = `700 46px ${F.disp}`;
+    wrapLines(ctx, (p.title || "Training session").toUpperCase(), bw).forEach(l => { text(l, pad, y, ctx.font, C.ink); y += 50; });
+    y += 4;
+    const total = totalMinutes();
+    text([p.team, p.ageGroup, p.date, p.players ? `${p.players} players` : "", `${total} min`].filter(Boolean).join("  ·  "), pad, y, `500 19px ${F.body}`, C.muted); y += 30;
+    if (p.focus) { text("Focus: " + p.focus, pad, y, `600 19px ${F.body}`, C.ink); y += 30; }
+    y += 8;
+    let x = pad; const sc = Math.max(total, 1);
+    p.blocks.forEach(b => { const w = (Number(b.minutes) || 0) / sc * bw; ctx.fillStyle = PHASE_HEX[b.phase] || PHASE_HEX.technical; ctx.fillRect(x, y, Math.max(0, w - 3), 14); x += w; });
+    y += 42;
+    let t = 0;
+    p.blocks.forEach((b, i) => {
+      const s = t; t += Number(b.minutes) || 0;
+      ctx.fillStyle = C.line; ctx.fillRect(pad, y, bw, 1); y += 22;
+      const img = imgs[i], tx = img ? pad + DW + gap : pad, tw = CW - pad - tx, top = y;
+      let ty = y;
+      ctx.font = `700 14px ${F.body}`;
+      const lab = phaseLabel(b.phase).toUpperCase(), lw = ctx.measureText(lab).width + 20;
+      ctx.fillStyle = PHASE_HEX[b.phase] || PHASE_HEX.technical; roundRect(ctx, tx, ty, lw, 24, 12); ctx.fill();
+      text(lab, tx + 10, ty + 5, ctx.font, "#ffffff");
+      text(`${fmt(s)}–${fmt(t)}  ·  ${b.minutes} min`, tx + lw + 12, ty + 4, `500 15px ${F.mono}`, C.muted);
+      ty += 34;
+      ctx.font = `700 26px ${F.body}`;
+      wrapLines(ctx, `${i + 1}. ${b.name || "Untitled drill"}`, tw).forEach(l => { text(l, tx, ty, ctx.font, C.ink); ty += 32; });
+      const sub = [b.area, b.players].filter(Boolean).join("  ·  ");
+      if (sub) { text(sub, tx, ty, `500 16px ${F.body}`, C.muted); ty += 26; }
+      [["Organisation", b.setup], ["Coaching points", b.points], ["Equipment", b.equipment]].forEach(([h, body]) => {
+        if (!body) return;
+        ty += 8; text(h.toUpperCase(), tx, ty, `700 13px ${F.body}`, C.accent); ty += 20;
+        ty = para(body, tx, ty, tw);
+      });
+      if (img) ctx.drawImage(img, pad, top, DW, DH);
+      y = Math.max(ty, img ? top + DH : ty) + 24;
+    });
+    const kit = [...parseKit()].map(([n, q]) => (q ? `${q} ${n}` : n)).join(", ");
+    if (kit || p.notes) { ctx.fillStyle = C.line; ctx.fillRect(pad, y, bw, 1); y += 22; }
+    [["Kit list", kit], ["Notes", p.notes]].forEach(([h, body]) => {
+      if (!body) return;
+      text(h.toUpperCase(), pad, y, `700 13px ${F.body}`, C.accent); y += 20;
+      y = para(body, pad, y, bw) + 12;
+    });
+    return y + pad - 12;
+  };
+  const S = 2, canvas = document.createElement("canvas");
+  canvas.width = CW; canvas.height = 10;
+  const h = Math.ceil(draw(canvas.getContext("2d")));
+  canvas.width = CW * S; canvas.height = h * S;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(S, S); ctx.fillStyle = C.bg; ctx.fillRect(0, 0, CW, h);
+  draw(ctx);
+  return await new Promise((res, rej) => canvas.toBlob(b => (b ? res(b) : rej(new Error("Image failed"))), "image/png"));
+}
+
+let downloads = null, shareBlob = null, shareUrl = null;
+const SAVE_HINT = "Right-click or long-press the image to save it.";
+async function openShare() {
+  $("shareTitle").textContent = current.title || "Untitled session";
+  $("shNote").hidden = readOnly;
+  $("shSave").hidden = true;
+  $("shImg").removeAttribute("src");
+  $("shMsg").textContent = "Building the image…";
+  $("share").hidden = false;
+  document.body.style.overflow = "hidden";
+  $("shClose").focus();
+  try {
+    shareBlob = await buildPlanImage();
+    if (shareUrl) URL.revokeObjectURL(shareUrl);
+    shareUrl = URL.createObjectURL(shareBlob);
+    $("shImg").src = shareUrl;
+    $("shSave").hidden = !downloads;
+    $("shMsg").textContent = downloads ? "" : SAVE_HINT;
+  } catch {
+    shareBlob = null;
+    $("shMsg").textContent = "Couldn't build the image. Use Copy as text instead.";
+  }
+}
+function closeShare() { $("share").hidden = true; document.body.style.overflow = ""; $("shareBtn").focus(); }
+$("shareBtn").addEventListener("click", openShare);
+$("shClose").addEventListener("click", closeShare);
+$("share").addEventListener("click", e => { if (e.target.id === "share") closeShare(); });
+$("shCopy").addEventListener("click", copyPlanText);
+$("shSave").addEventListener("click", async () => {
+  if (!downloads || !shareBlob) return;
+  const base = (current.title || "training session").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-").toLowerCase() || "training-session";
+  try {
+    await downloads.save({ filename: `${base}${current.date ? "-" + current.date : ""}.png`, data: shareBlob });
+    toast("Image saved");
+  } catch (e) {
+    if (e?.code === "declined") return;
+    if (["unavailable", "not_granted", "capability_disabled", "capability_removed"].includes(e?.code)) {
+      downloads = null; $("shSave").hidden = true; $("shMsg").textContent = "Saving isn't available here. " + SAVE_HINT; return;
+    }
+    toast(e?.code === "rate_limited" ? "A save is already open. Try again in a moment." : "Couldn't save: " + (e?.message || "error"));
+  }
+});
+document.addEventListener("keydown", e => { if (!$("share").hidden && e.key === "Escape") { e.preventDefault(); closeShare(); } });
+
+/* ---------- share: link that opens the plan on the website ---------- */
+const SITE_URL = "https://lsantori.github.io/touchline/";
+const SHARE_PREFIX = "#plan=";
+const b64u = bytes => { let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+const unb64u = str => Uint8Array.from(atob(str.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+const streamBytes = async (bytes, tx) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(tx)).arrayBuffer());
+async function packPlan(p) {
+  const bytes = new TextEncoder().encode(JSON.stringify(p));
+  if (window.CompressionStream) return "z" + b64u(await streamBytes(bytes, new CompressionStream("deflate-raw")));
+  return "j" + b64u(bytes);
+}
+async function unpackPlan(str) {
+  const kind = str[0], bytes = unb64u(decodeURIComponent(str.slice(1)));
+  if (kind === "z") return JSON.parse(new TextDecoder().decode(await streamBytes(bytes, new DecompressionStream("deflate-raw"))));
+  if (kind === "j") return JSON.parse(new TextDecoder().decode(bytes));
+  throw new Error("Unknown link format");
+}
+function siteBase() {
+  return /\.github\.io$/.test(location.hostname) ? location.origin + location.pathname : SITE_URL;
+}
+$("shLink").addEventListener("click", async () => {
+  if (dirty) { clearTimeout(saveTimer); store.save(current); }
+  try { copyText(siteBase() + SHARE_PREFIX + await packPlan(current), "Link copied. Paste it into a message to your assistants"); }
+  catch { toast("Couldn't make the link"); }
+});
+async function openShared(code) {
+  document.body.classList.add("shared");
+  setReadOnly();
+  try {
+    const p = await unpackPlan(code);
+    if (!p || !Array.isArray(p.blocks)) throw new Error("bad plan");
+    plans = [p]; loadedOnce = true;
+    current = JSON.parse(JSON.stringify(p));
+    current.blocks = current.blocks.map(b => ({ ...blockFrom(b), id: b.id || uid() }));
+    dirty = false;
+    renderAll(); lockFields();
+    document.title = (p.title || "Training session") + " · Touchline";
+    $("status").textContent = "Shared plan · view only";
+  } catch {
+    $("status").textContent = "This link is broken";
+    toast("This link didn't open. Ask the coach to send it again, and copy the whole link.");
+  }
+}
+window.addEventListener("hashchange", () => { if (location.hash.startsWith(SHARE_PREFIX) || document.body.classList.contains("shared")) location.reload(); });
+
+// Called by the Mac app before it quits so the last edit is never lost.
+window.touchlineFlush = () => { if (dirty) { clearTimeout(saveTimer); store.save(current); } return JSON.stringify(plans); };
+
+/* ---------- boot ---------- */
+renderAll();
+renderLibrary();
+if (location.hash.startsWith(SHARE_PREFIX)) openShared(location.hash.slice(SHARE_PREFIX.length));
+else store.init();
+// Local file: save files with a normal browser download.
+downloads = {
+  async save({ filename, data }) {
+    const blob = data instanceof Blob ? data : new Blob([data]);
+    if (NATIVE) {
+      const base64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] || ""); r.onerror = rej; r.readAsDataURL(blob); });
+      const result = await NATIVE.postMessage({ type: "saveFile", filename, base64 });
+      if (result !== "saved") throw { code: "declined" };
+      return { status: "saved" };
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    return { status: "saved" };
+  },
+};
+$("backupBtn").addEventListener("click", () => {
+  if (dirty) { clearTimeout(saveTimer); store.save(current); }
+  const data = JSON.stringify({ app: "touchline", version: 1, exported: new Date().toISOString(), plans }, null, 2);
+  downloads.save({ filename: `touchline-backup-${today()}.json`, data: new Blob([data], { type: "application/json" }) })
+    .then(() => toast(`Backed up ${plans.length} plan${plans.length === 1 ? "" : "s"}`), () => {});
+});
+$("restoreInput").addEventListener("change", async e => {
+  const file = e.target.files[0]; e.target.value = "";
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    const list = Array.isArray(parsed) ? parsed : parsed.plans;
+    if (!Array.isArray(list)) throw new Error("bad file");
+    let n = 0;
+    list.forEach(p => {
+      if (!p || !p.id) return;
+      const i = plans.findIndex(x => x.id === p.id);
+      if (i >= 0) plans[i] = p; else plans.push(p);
+      n++;
+    });
+    try { persistPlans(); } catch { toast("Browser storage is blocked, so restored plans won't be kept"); }
+    if (!dirty && current.blocks.length === 0 && plans.length) {
+      const latest = [...plans].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+      openPlan(latest.id);
+    } else renderPlanList();
+    toast(`Restored ${n} plan${n === 1 ? "" : "s"}`);
+  } catch { toast("That file isn't a Touchline backup"); }
+});
+</script>
+
+</body>
+</html>

@@ -1427,7 +1427,7 @@ $("shSave").addEventListener("click", async () => {
 document.addEventListener("keydown", e => { if (!$("share").hidden && e.key === "Escape") { e.preventDefault(); closeShare(); } });
 
 /* ---------- share: link that opens the plan on the website ---------- */
-const SITE_URL = "https://lsantori.github.io/touchline/";
+const SITE_URL = "https://luissantori.com/touchline/";
 const SHARE_PREFIX = "#plan=";
 const b64u = bytes => { let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
@@ -1445,7 +1445,7 @@ async function unpackPlan(str) {
   throw new Error("Unknown link format");
 }
 function siteBase() {
-  return /\.github\.io$/.test(location.hostname) ? location.origin + location.pathname : SITE_URL;
+  return location.protocol === "https:" ? location.origin + location.pathname : SITE_URL;
 }
 $("shLink").addEventListener("click", async () => {
   if (dirty) { clearTimeout(saveTimer); store.save(current); }

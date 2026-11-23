@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Touchline Session Planner</title>
+<title>Kancha Session Planner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
 <style>
@@ -277,7 +277,7 @@ img { max-width: 100%; }
 </head>
 <body>
 <header class="top">
-  <div class="brand"><h1>Touchline</h1><span>Session planner</span></div>
+  <div class="brand"><h1>Kancha</h1><span>Session planner</span></div>
   <div class="top-actions">
     <span class="status" id="status">Loading…</span>
     <button class="btn" id="backupBtn" type="button">Back up</button>
@@ -481,8 +481,8 @@ const LIB_DG = {
 
 /* ---------- helpers ---------- */
 const $ = id => document.getElementById(id);
-// When running inside the Touchline Mac app, plans and files go through the app.
-const NATIVE = window.webkit?.messageHandlers?.touchline || null;
+// When running inside the Kancha Mac app, plans and files go through the app.
+const NATIVE = window.webkit?.messageHandlers?.kancha || null;
 const SAVED_LABEL = NATIVE ? "Saved on this Mac" : "Saved in this browser";
 function persistPlans() {
   const json = JSON.stringify(plans);
@@ -490,7 +490,7 @@ function persistPlans() {
     Promise.resolve(NATIVE.postMessage({ type: "savePlans", json })).catch(() => setStatus("Not saved: couldn't write the file"));
     return;
   }
-  localStorage.setItem("touchline-plans", json);
+  localStorage.setItem("kancha-plans", json);
 }
 const safeId = v => (typeof v === "string" && /^[\w-]{1,64}$/.test(v) ? v : uid());
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
@@ -531,8 +531,8 @@ const store = {
       }, err => { clearTimeout(timer); setStatus("Sync error: " + (err?.message || "unknown")); });
     } else {
       this.mode = "local";
-      if (Array.isArray(window.__TOUCHLINE_PLANS__)) plans = window.__TOUCHLINE_PLANS__;
-      else { try { plans = JSON.parse(localStorage.getItem("touchline-plans") || "[]"); } catch { plans = []; } }
+      if (Array.isArray(window.__KANCHA_PLANS__)) plans = window.__KANCHA_PLANS__;
+      else { try { plans = JSON.parse(localStorage.getItem("kancha-plans") || localStorage.getItem("touchline-plans") || "[]"); } catch { plans = []; } }
       onPlansLoaded();
     }
   },
@@ -1590,7 +1590,7 @@ async function openShared(code) {
     current.blocks = current.blocks.map(b => ({ ...blockFrom(b), id: safeId(b.id) }));
     dirty = false;
     renderAll(); lockFields();
-    document.title = (p.title || "Training session") + " · Touchline";
+    document.title = (p.title || "Training session") + " · Kancha";
     $("status").textContent = "Shared plan · view only";
   } catch {
     $("status").textContent = "This link is broken";
@@ -1600,7 +1600,7 @@ async function openShared(code) {
 window.addEventListener("hashchange", () => { if (location.hash.startsWith(SHARE_PREFIX) || document.body.classList.contains("shared")) location.reload(); });
 
 // Called by the Mac app before it quits so the last edit is never lost.
-window.touchlineFlush = () => { if (dirty) { clearTimeout(saveTimer); store.save(current); } return JSON.stringify(plans); };
+window.kanchaFlush = () => { if (dirty) { clearTimeout(saveTimer); store.save(current); } return JSON.stringify(plans); };
 
 /* ---------- boot ---------- */
 renderAll();
@@ -1627,8 +1627,8 @@ downloads = {
 };
 $("backupBtn").addEventListener("click", () => {
   if (dirty) { clearTimeout(saveTimer); store.save(current); }
-  const data = JSON.stringify({ app: "touchline", version: 1, exported: new Date().toISOString(), plans }, null, 2);
-  downloads.save({ filename: `touchline-backup-${today()}.json`, data: new Blob([data], { type: "application/json" }) })
+  const data = JSON.stringify({ app: "kancha", version: 1, exported: new Date().toISOString(), plans }, null, 2);
+  downloads.save({ filename: `kancha-backup-${today()}.json`, data: new Blob([data], { type: "application/json" }) })
     .then(() => toast(`Backed up ${plans.length} plan${plans.length === 1 ? "" : "s"}`), () => {});
 });
 $("restoreInput").addEventListener("change", async e => {
@@ -1651,7 +1651,7 @@ $("restoreInput").addEventListener("change", async e => {
       openPlan(latest.id);
     } else renderPlanList();
     toast(`Restored ${n} plan${n === 1 ? "" : "s"}`);
-  } catch { toast("That file isn't a Touchline backup"); }
+  } catch { toast("That file isn't a Kancha backup"); }
 });
 </script>
 

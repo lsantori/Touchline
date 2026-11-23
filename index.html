@@ -238,6 +238,41 @@ button, input, select, textarea { font: inherit; color: inherit; }
 body { margin: 0; font-size: 14px; }
 img { max-width: 100%; }
 [hidden] { display: none !important; }
+/* ---------- print / PDF ---------- */
+#printRoot { display: none; }
+@media print {
+  @page { size: letter; margin: 0.45in; }
+  html, body { background: #fff !important; }
+  body > *:not(#printRoot) { display: none !important; }
+  #printRoot { display: block; }
+}
+#printRoot { --grass: #2f7a4c; --grass-2: #36854f; --chalk: #f4f7f2; --team-a: #2f6fe0; --team-b: #e0412f; --team-n: #f4c534; --team-gk: #ff8a1f; --cone: #ff9f1a; --ink: #142019;
+  color: #142019; background: #fff; font-family: var(--body); font-size: 11pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.pr-page { break-after: page; page-break-after: always; }
+.pr-page:last-child { break-after: auto; page-break-after: auto; }
+.pr-eyebrow { margin: 0 0 2pt; font-size: 9pt; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #17603d; }
+.pr-title { margin: 0; font: 700 30pt/1.05 var(--display); text-transform: uppercase; }
+.pr-meta { margin: 4pt 0 0; color: #56655c; font-size: 11pt; }
+.pr-focus { margin: 8pt 0 0; font-size: 12pt; }
+.pr-mono { font-family: var(--mono); font-size: 9.5pt; color: #56655c; white-space: nowrap; }
+.pr-table { width: 100%; border-collapse: collapse; margin-top: 16pt; font-size: 11pt; }
+.pr-table th { text-align: left; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .06em; color: #56655c; border-bottom: 1.5pt solid #142019; padding: 4pt; }
+.pr-table td { border-bottom: 1px solid #d3dcd5; padding: 7pt 4pt; vertical-align: top; }
+.pr-phase { display: inline-block; color: #fff; font-weight: 700; font-size: 8pt; letter-spacing: .05em; text-transform: uppercase; padding: 2pt 7pt; border-radius: 9pt; white-space: nowrap; }
+.pr-drill-head { display: flex; align-items: center; gap: 10pt; flex-wrap: wrap; }
+.pr-of { margin-left: auto; font-size: 9pt; color: #56655c; }
+.pr-drill-name { margin: 6pt 0 0; font: 700 24pt/1.1 var(--display); }
+.pr-diagram { margin-top: 10pt; break-inside: avoid; }
+.pr-diagram svg { display: block; width: 100%; height: auto; border-radius: 6pt; }
+.pr-key { display: flex; flex-wrap: wrap; align-items: center; gap: 4pt 14pt; margin-top: 6pt; font-size: 9pt; color: #56655c; }
+.pr-key span { display: inline-flex; align-items: center; gap: 4pt; }
+.pr-key svg { height: 14pt; border-radius: 2pt; }
+.pr-seq { margin-top: 10pt; break-inside: avoid; }
+.pr-seq ol { margin: 0; padding-left: 18pt; font-size: 10.5pt; line-height: 1.45; }
+.pr-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18pt; margin-top: 12pt; }
+.pr-h { margin: 0 0 3pt; font-size: 9pt; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #17603d; }
+.pr-body { margin: 0; font-size: 11pt; line-height: 1.42; white-space: pre-wrap; }
+.pr-equip { margin-top: 12pt; }
 </style>
 </head>
 <body>
@@ -312,6 +347,7 @@ img { max-width: 100%; }
   </aside>
 </div>
 <div class="toast" id="toast" hidden></div>
+<div id="printRoot" aria-hidden="true"></div>
 
 <div class="dg-overlay" id="share" hidden role="dialog" aria-modal="true" aria-labelledby="shareTitle">
   <div class="dg-panel share-panel">
@@ -322,12 +358,13 @@ img { max-width: 100%; }
       </div>
       <div class="top-actions">
         <button class="btn primary" id="shLink" type="button">Copy link</button>
+        <button class="btn" id="shPdf" type="button">Save PDF</button>
         <button class="btn" id="shSave" type="button">Save image</button>
         <button class="btn" id="shCopy" type="button">Copy as text</button>
         <button class="btn" id="shClose" type="button">Close</button>
       </div>
     </div>
-    <p class="share-note" id="shNote">Copy the link and send it to your assistant coaches on WhatsApp or by email. They can open it on any phone or computer, read the plan and press Play on the drills. The plan travels inside the link, so it is not stored on any website. You can also save the image or copy the plan as text.</p>
+    <p class="share-note" id="shNote">Copy the link and send it to your assistant coaches on WhatsApp or by email. They can open it on any phone or computer, read the plan and press Play on the drills. The plan travels inside the link, so it is not stored on any website. To print, use Save PDF: each drill gets its own page with a large diagram. You can also save an image or copy the plan as text.</p>
     <p class="share-msg" id="shMsg"></p>
     <div class="share-preview"><img id="shImg" alt="Image of the full session plan"></div>
   </div>
@@ -1426,6 +1463,95 @@ $("shSave").addEventListener("click", async () => {
   }
 });
 document.addEventListener("keydown", e => { if (!$("share").hidden && e.key === "Escape") { e.preventDefault(); closeShare(); } });
+
+/* ---------- PDF: one page per drill, for printing ---------- */
+function fileBase() {
+  const base = (current.title || "training session").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-").toLowerCase() || "training-session";
+  return base + (current.date ? "-" + current.date : "");
+}
+function stepSummary(d) {
+  const plan = planAnimation(d);
+  return plan.phases.map((ph, k) => {
+    const after = plan.phases[k + 1]?.start || ph.start;
+    const parts = ph.group.map(g => {
+      const l = g.l;
+      if (l.t === "pass") {
+        const from = nearestIdx(d.items, ph.start, PLAYERS, l.x1, l.y1, 45);
+        let to = nearestIdx(d.items, after, PLAYERS, l.x2, l.y2, 45);
+        if (to === from) to = -1;
+        return "Pass" + (from >= 0 ? " from " + itemName(d, from) : "") + (to >= 0 ? " to " + itemName(d, to) : "");
+      }
+      const verb = l.t === "run" ? "runs" : "dribbles";
+      return g.mover >= 0 ? `${itemName(d, g.mover)} ${verb}` : LINE_TYPES[l.t];
+    });
+    return { step: ph.step, text: parts.join("; at the same time, ") };
+  });
+}
+function keyHtml(d) {
+  const used = new Set([...d.items.map(it => it.t), ...d.lines.map(l => l.t)]);
+  const chip = (vb, w, inner, label) => `<span><svg viewBox="${vb}" style="width:${w}pt">${inner}</svg>${esc(label)}</span>`;
+  const out = [];
+  Object.keys(ITEM_TYPES).forEach(t => {
+    if (used.has(t)) out.push(chip("-16 -12 32 24", 18.7, `<rect x="-16" y="-12" width="32" height="24" style="fill:var(--grass)"/>${itemSvg({ t, x: 0, y: 0, r: 0, label: "" })}`, ITEM_TYPES[t]));
+  });
+  Object.keys(LINE_TYPES).forEach(t => {
+    if (used.has(t)) out.push(chip("0 0 44 16", 38.5, `<rect width="44" height="16" style="fill:var(--grass)"/>${lineSvg({ t, x1: 5, y1: 8, x2: 39, y2: 8 })}`, LINE_TYPES[t]));
+  });
+  if (d.lines.length > 1) out.push("<span>Numbers on the arrows show the order</span>");
+  return out.length ? `<div class="pr-key">${out.join("")}</div>` : "";
+}
+function printHtml() {
+  const p = current, total = totalMinutes();
+  const meta = [p.team, p.ageGroup, p.date, p.players ? `${p.players} players` : "", `${total} min`].filter(Boolean).map(esc).join(" · ");
+  const kit = [...parseKit()].map(([n, q]) => (q ? `${q} ${n}` : n)).join(", ");
+  let t = 0;
+  const rows = p.blocks.map((b, i) => { const s = t; t += Number(b.minutes) || 0; return { b, i, s, e: t }; });
+  const pill = b => `<span class="pr-phase" style="background:${PHASE_HEX[b.phase] || PHASE_HEX.technical}">${esc(phaseLabel(b.phase))}</span>`;
+  const sec = (h, body) => (body ? `<div><p class="pr-h">${h}</p><p class="pr-body">${esc(body)}</p></div>` : "");
+  const sub = b => esc([b.area, b.players].filter(Boolean).join(" · "));
+  const cover = `<section class="pr-page">
+    <p class="pr-eyebrow">Training session</p>
+    <h1 class="pr-title">${esc(p.title || "Training session")}</h1>
+    <p class="pr-meta">${meta}</p>
+    ${p.focus ? `<p class="pr-focus"><b>Focus:</b> ${esc(p.focus)}</p>` : ""}
+    <table class="pr-table"><thead><tr><th>Time</th><th>Phase</th><th>Drill</th><th>Area · players</th><th>Min</th></tr></thead><tbody>
+    ${rows.map(({ b, i, s, e }) => `<tr><td class="pr-mono">${fmt(s)}–${fmt(e)}</td><td>${pill(b)}</td><td><b>${i + 1}. ${esc(b.name || "Untitled drill")}</b></td><td>${sub(b)}</td><td class="pr-mono">${esc(b.minutes)}</td></tr>`).join("")}
+    </tbody></table>
+    <div class="pr-cols">${sec("Kit list", kit)}${sec("Notes", p.notes)}</div>
+  </section>`;
+  const drills = rows.map(({ b, i, s, e }) => {
+    const d = b.diagram || { items: [], lines: [] };
+    const seq = d.lines.length ? stepSummary(d) : [];
+    return `<section class="pr-page">
+      <div class="pr-drill-head">${pill(b)}<span class="pr-mono">${fmt(s)}–${fmt(e)} · ${esc(b.minutes)} min</span><span class="pr-of">Drill ${i + 1} of ${rows.length}</span></div>
+      <h2 class="pr-drill-name">${i + 1}. ${esc(b.name || "Untitled drill")}</h2>
+      ${sub(b) ? `<p class="pr-meta">${sub(b)}</p>` : ""}
+      ${hasDiagram(b) ? `<div class="pr-diagram">${previewSvg(b)}${keyHtml(d)}</div>` : ""}
+      ${seq.length ? `<div class="pr-seq"><p class="pr-h">Sequence</p><ol>${seq.map(x => `<li value="${x.step}">${esc(x.text)}</li>`).join("")}</ol></div>` : ""}
+      <div class="pr-cols">${sec("Organisation", b.setup)}${sec("Coaching points", b.points)}</div>
+      ${b.equipment ? `<div class="pr-equip">${sec("Equipment", b.equipment)}</div>` : ""}
+    </section>`;
+  }).join("");
+  return cover + drills;
+}
+async function exportPdf() {
+  if (dirty && !readOnly) { clearTimeout(saveTimer); store.save(current); }
+  stopAnim();
+  $("printRoot").innerHTML = printHtml();
+  if (NATIVE) {
+    try {
+      const r = await NATIVE.postMessage({ type: "savePDF", filename: fileBase() + ".pdf" });
+      if (r === "saved") toast("PDF saved");
+    } catch { toast("Couldn't save the PDF"); }
+    return;
+  }
+  const oldTitle = document.title;
+  document.title = fileBase();
+  window.addEventListener("afterprint", () => { document.title = oldTitle; }, { once: true });
+  setTimeout(() => window.print(), 50);
+}
+$("shPdf").addEventListener("click", exportPdf);
+if (!NATIVE) $("shPdf").textContent = "Print or save PDF";
 
 /* ---------- share: link that opens the plan on the website ---------- */
 const SITE_URL = "https://luissantori.com/Touchline/";

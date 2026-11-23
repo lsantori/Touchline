@@ -455,6 +455,7 @@ function persistPlans() {
   }
   localStorage.setItem("touchline-plans", json);
 }
+const safeId = v => (typeof v === "string" && /^[\w-]{1,64}$/.test(v) ? v : uid());
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const today = () => new Date().toISOString().slice(0, 10);
@@ -558,7 +559,7 @@ function openPlan(id) {
   if (!p) return;
   if (dirty) { clearTimeout(saveTimer); store.save(current); }
   current = JSON.parse(JSON.stringify(p));
-  current.blocks = (current.blocks || []).map(b => ({ ...blockFrom(b), id: b.id || uid() }));
+  current.blocks = (current.blocks || []).map(b => ({ ...blockFrom(b), id: safeId(b.id) }));
   dirty = false;
   renderAll();
 }
@@ -732,7 +733,7 @@ function renderBlocks() {
     return;
   }
   wrap.innerHTML = current.blocks.map((b, i) => `
-  <article class="block" data-id="${b.id}">
+  <article class="block" data-id="${esc(b.id)}">
     <div class="block-head">
       <span class="clock"></span>
       <select class="phase-select" data-f="phase" aria-label="Phase" style="background:${phaseColor(b.phase)}">
@@ -1460,7 +1461,7 @@ async function openShared(code) {
     if (!p || !Array.isArray(p.blocks)) throw new Error("bad plan");
     plans = [p]; loadedOnce = true;
     current = JSON.parse(JSON.stringify(p));
-    current.blocks = current.blocks.map(b => ({ ...blockFrom(b), id: b.id || uid() }));
+    current.blocks = current.blocks.map(b => ({ ...blockFrom(b), id: safeId(b.id) }));
     dirty = false;
     renderAll(); lockFields();
     document.title = (p.title || "Training session") + " · Touchline";

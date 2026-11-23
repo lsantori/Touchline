@@ -158,6 +158,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .drill h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .drill .meta-line { font: 500 11px var(--mono); color: var(--muted); }
 .drill p { margin: 0; font-size: 13px; color: var(--muted); }
+.drill-btns { display: flex; gap: 4px; align-items: center; flex: none; }
+.drill-btns .btn { padding: 3px 10px; font-size: 12px; }
+.drill.mine { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.mine-tag { margin-left: 6px; padding: 1px 6px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; vertical-align: 2px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 
 /* Diagram editor */
@@ -781,6 +785,7 @@ function renderBlocks() {
       <div class="block-actions">
         <button class="icon-btn" data-act="up" ${i === 0 ? "disabled" : ""} title="Move up" aria-label="Move up">↑</button>
         <button class="icon-btn" data-act="down" ${i === current.blocks.length - 1 ? "disabled" : ""} title="Move down" aria-label="Move down">↓</button>
+        <button class="icon-btn" data-act="lib" title="Save to my drill library" aria-label="Save to my drill library">☆</button>
         <button class="icon-btn" data-act="dup" title="Duplicate" aria-label="Duplicate">⧉</button>
         <button class="icon-btn" data-act="del" title="Remove block" aria-label="Remove block">✕</button>
       </div>
@@ -823,20 +828,62 @@ function renderKit() {
 }
 
 let libPhase = "all";
+/* ---------- my drills: drills the coach saved into the library ---------- */
+let myDrills = [];
+function loadDrills() {
+  let list = [];
+  if (Array.isArray(window.__KANCHA_DRILLS__)) list = window.__KANCHA_DRILLS__;
+  else { try { list = JSON.parse(localStorage.getItem("kancha-drills") || "[]"); } catch { list = []; } }
+  myDrills = (Array.isArray(list) ? list : []).filter(d => d && typeof d === "object")
+    .map(d => ({ ...blockFrom(d), id: safeId(d.id), savedAt: Number(d.savedAt) || 0 }));
+}
+function persistDrills() {
+  const json = JSON.stringify(myDrills);
+  if (NATIVE) { Promise.resolve(NATIVE.postMessage({ type: "saveDrills", json })).catch(() => toast("Couldn't save your drill library")); return; }
+  try { localStorage.setItem("kancha-drills", json); } catch { toast("Browser storage is blocked, so your library won't be kept"); }
+}
+function saveToLibrary(b) {
+  const name = String(b.name || "").trim();
+  if (!name) {
+    toast("Give the drill a name first");
+    document.querySelector(`.block[data-id="${b.id}"] .name-input`)?.focus();
+    return;
+  }
+  const data = { phase: b.phase, name, minutes: b.minutes, area: b.area, players: b.players, equipment: b.equipment,
+    setup: b.setup, points: b.points, diagram: JSON.parse(JSON.stringify(b.diagram || { items: [], lines: [] })), savedAt: Date.now() };
+  const j = myDrills.findIndex(d => String(d.name || "").trim().toLowerCase() === name.toLowerCase());
+  if (j >= 0) { myDrills[j] = { ...data, id: myDrills[j].id }; toast(`Updated "${name}" in your library`); }
+  else { myDrills.unshift({ ...data, id: uid() }); toast(`Saved "${name}" to your library`); }
+  persistDrills();
+  renderLibrary();
+}
 function renderLibrary() {
-  $("libFilters").innerHTML = [{ id: "all", label: "All" }, ...PHASES].map(p =>
-    `<button type="button" class="chip ${libPhase === p.id ? "on" : ""}" data-phase="${p.id}">${p.label}</button>`).join("");
+  const chips = [{ id: "all", label: "All" }, { id: "mine", label: "My drills" + (myDrills.length ? ` (${myDrills.length})` : "") }, ...PHASES];
+  $("libFilters").innerHTML = chips.map(p =>
+    `<button type="button" class="chip ${libPhase === p.id ? "on" : ""}" data-phase="${p.id}">${esc(p.label)}</button>`).join("");
   const q = $("libSearch").value.trim().toLowerCase();
-  const list = LIBRARY.map((d, i) => ({ d, i })).filter(({ d }) =>
-    (libPhase === "all" || d.phase === libPhase) && (!q || (d.name + " " + d.setup + " " + d.points).toLowerCase().includes(q)));
-  $("libList").innerHTML = list.length ? list.map(({ d, i }) => `
-    <div class="drill">
-      <div class="drill-top"><h3><span class="dot" style="background:${phaseColor(d.phase)}"></span>${esc(d.name)}</h3>
-      <button class="btn" type="button" data-add="${i}" style="padding:3px 10px;font-size:12px">Add</button></div>
-      <div class="meta-line">${d.minutes} min · ${esc(d.area)} · ${esc(d.players)}</div>
-      ${LIB_DG[d.name] ? `<div class="drill-dg">${previewSvg({ area: d.area, diagram: fromNorm(LIB_DG[d.name], d.area) })}</div>` : ""}
-      <p>${esc(d.setup)}</p>
-    </div>`).join("") : '<div class="empty">No drills match.</div>';
+  const match = d => !q || [d.name, d.setup, d.points, d.equipment].join(" ").toLowerCase().includes(q);
+  const mine = myDrills.map((d, i) => ({ d, i, mine: true }))
+    .filter(({ d }) => (libPhase === "all" || libPhase === "mine" || d.phase === libPhase) && match(d));
+  const builtIn = libPhase === "mine" ? [] : LIBRARY.map((d, i) => ({ d, i, mine: false }))
+    .filter(({ d }) => (libPhase === "all" || d.phase === libPhase) && match(d));
+  const card = ({ d, i, mine }) => {
+    const dg = mine ? (hasDiagram(d) ? d.diagram : null) : (LIB_DG[d.name] ? fromNorm(LIB_DG[d.name], d.area) : null);
+    const meta = [`${esc(d.minutes)} min`, esc(d.area), esc(d.players)].filter(Boolean).join(" · ");
+    return `
+    <div class="drill${mine ? " mine" : ""}">
+      <div class="drill-top"><h3><span class="dot" style="background:${phaseColor(d.phase)}"></span>${esc(d.name || "Untitled drill")}${mine ? '<span class="mine-tag">Yours</span>' : ""}</h3>
+      <div class="drill-btns">${mine ? `<button class="btn" type="button" data-remove="${i}" title="Remove from your library" aria-label="Remove ${esc(d.name)} from your library">✕</button>` : ""}<button class="btn" type="button" data-add="${i}"${mine ? ' data-mine="1"' : ""}>Add</button></div></div>
+      <div class="meta-line">${meta}</div>
+      ${dg ? `<div class="drill-dg">${previewSvg({ area: d.area, diagram: dg })}</div>` : ""}
+      ${d.setup ? `<p>${esc(d.setup)}</p>` : ""}
+    </div>`;
+  };
+  const all = [...mine, ...builtIn];
+  const empty = libPhase === "mine" && !myDrills.length
+    ? "No saved drills yet. Press ☆ on any drill in your plan to save it here."
+    : "No drills match.";
+  $("libList").innerHTML = all.length ? all.map(card).join("") : `<div class="empty">${empty}</div>`;
 }
 
 function renderAll() { renderMeta(); renderBlocks(); renderTimeline(); renderKit(); renderPlanList(); resetDelete(); }
@@ -873,6 +920,7 @@ $("blocks").addEventListener("click", e => {
   const i = current.blocks.findIndex(b => b.id === id);
   const act = btn.dataset.act;
   if (act === "diagram") { openDiagram(id); return; }
+  if (act === "lib") { saveToLibrary(current.blocks[i]); return; }
   if (act === "up" && i > 0) [current.blocks[i - 1], current.blocks[i]] = [current.blocks[i], current.blocks[i - 1]];
   if (act === "down" && i < current.blocks.length - 1) [current.blocks[i + 1], current.blocks[i]] = [current.blocks[i], current.blocks[i + 1]];
   if (act === "dup") current.blocks.splice(i + 1, 0, { ...JSON.parse(JSON.stringify(current.blocks[i])), id: uid() });
@@ -889,7 +937,27 @@ function addBlock(data) {
 }
 $("addBlockBtn").addEventListener("click", () => addBlock({ phase: "technical", minutes: 10 }));
 $("libList").addEventListener("click", e => {
-  const i = e.target.dataset.add; if (i == null) return;
+  const rm = e.target.closest("[data-remove]");
+  if (rm) {
+    const i = Number(rm.dataset.remove);
+    if (!rm.dataset.armed) {
+      rm.dataset.armed = "1"; rm.textContent = "Remove?";
+      setTimeout(() => { if (rm.isConnected) { delete rm.dataset.armed; rm.textContent = "✕"; } }, 3000);
+      return;
+    }
+    const [d] = myDrills.splice(i, 1);
+    persistDrills(); renderLibrary();
+    toast(`Removed "${d?.name || "drill"}" from your library`);
+    return;
+  }
+  const btn = e.target.closest("[data-add]"); if (!btn) return;
+  const i = Number(btn.dataset.add);
+  if (btn.dataset.mine) {
+    const d = myDrills[i]; if (!d) return;
+    addBlock(JSON.parse(JSON.stringify(d)));
+    toast(`Added ${d.name || "drill"}`);
+    return;
+  }
   const d = LIBRARY[i];
   addBlock({ ...d, diagram: fromNorm(LIB_DG[d.name], d.area) });
   toast(`Added ${d.name}`);
@@ -1604,6 +1672,7 @@ window.kanchaFlush = () => { if (dirty) { clearTimeout(saveTimer); store.save(cu
 
 /* ---------- boot ---------- */
 renderAll();
+loadDrills();
 renderLibrary();
 if (location.hash.startsWith(SHARE_PREFIX)) openShared(location.hash.slice(SHARE_PREFIX.length));
 else store.init();
@@ -1627,9 +1696,9 @@ downloads = {
 };
 $("backupBtn").addEventListener("click", () => {
   if (dirty) { clearTimeout(saveTimer); store.save(current); }
-  const data = JSON.stringify({ app: "kancha", version: 1, exported: new Date().toISOString(), plans }, null, 2);
+  const data = JSON.stringify({ app: "kancha", version: 1, exported: new Date().toISOString(), plans, drills: myDrills }, null, 2);
   downloads.save({ filename: `kancha-backup-${today()}.json`, data: new Blob([data], { type: "application/json" }) })
-    .then(() => toast(`Backed up ${plans.length} plan${plans.length === 1 ? "" : "s"}`), () => {});
+    .then(() => toast(`Backed up ${plans.length} plan${plans.length === 1 ? "" : "s"} and ${myDrills.length} saved drill${myDrills.length === 1 ? "" : "s"}`), () => {});
 });
 $("restoreInput").addEventListener("change", async e => {
   const file = e.target.files[0]; e.target.value = "";
@@ -1638,6 +1707,17 @@ $("restoreInput").addEventListener("change", async e => {
     const parsed = JSON.parse(await file.text());
     const list = Array.isArray(parsed) ? parsed : parsed.plans;
     if (!Array.isArray(list)) throw new Error("bad file");
+    let nd = 0;
+    if (Array.isArray(parsed.drills)) {
+      parsed.drills.forEach(d => {
+        if (!d || typeof d !== "object") return;
+        const item = { ...blockFrom(d), id: safeId(d.id), savedAt: Number(d.savedAt) || 0 };
+        const j = myDrills.findIndex(x => x.id === item.id);
+        if (j >= 0) myDrills[j] = item; else myDrills.push(item);
+        nd++;
+      });
+      if (nd) { persistDrills(); renderLibrary(); }
+    }
     let n = 0;
     list.forEach(p => {
       if (!p || !p.id) return;
@@ -1650,7 +1730,7 @@ $("restoreInput").addEventListener("change", async e => {
       const latest = [...plans].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
       openPlan(latest.id);
     } else renderPlanList();
-    toast(`Restored ${n} plan${n === 1 ? "" : "s"}`);
+    toast(`Restored ${n} plan${n === 1 ? "" : "s"}` + (nd ? ` and ${nd} saved drill${nd === 1 ? "" : "s"}` : ""));
   } catch { toast("That file isn't a Kancha backup"); }
 });
 </script>

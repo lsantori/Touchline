@@ -1427,7 +1427,7 @@ $("shSave").addEventListener("click", async () => {
 document.addEventListener("keydown", e => { if (!$("share").hidden && e.key === "Escape") { e.preventDefault(); closeShare(); } });
 
 /* ---------- share: link that opens the plan on the website ---------- */
-const SITE_URL = "https://luissantori.com/touchline/";
+const SITE_URL = "https://luissantori.com/Touchline/";
 const SHARE_PREFIX = "#plan=";
 const b64u = bytes => { let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };

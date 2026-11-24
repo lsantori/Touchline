@@ -242,6 +242,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 body { margin: 0; font-size: 14px; }
 img { max-width: 100%; }
 [hidden] { display: none !important; }
+.vid-panel { width: min(600px, 100%); }
+.vid-opts { border: 0; padding: 0; margin: 4px 0 0; display: grid; gap: 8px; font-size: 14px; }
+.vid-opts legend { padding: 0; margin-bottom: 6px; }
+.vid-opts label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.vid-progress { height: 8px; background: var(--sunk); border-radius: 4px; overflow: hidden; }
+#vidBar { height: 100%; width: 0; background: var(--accent); }
 /* ---------- print / PDF ---------- */
 #printRoot { display: none; }
 @media print {
@@ -350,6 +356,27 @@ img { max-width: 100%; }
     <div class="lib-list" id="libList"></div>
   </aside>
 </div>
+<div class="dg-overlay" id="vid" hidden role="dialog" aria-modal="true" aria-labelledby="vidTitle">
+  <div class="dg-panel vid-panel">
+    <div class="dg-head">
+      <div>
+        <p class="eyebrow" style="margin:0 0 4px">Export animation as video</p>
+        <h2 class="dg-title" id="vidTitle"></h2>
+      </div>
+      <div class="top-actions"><button class="btn" id="vidClose" type="button">Close</button></div>
+    </div>
+    <fieldset class="vid-opts">
+      <legend class="eyebrow">Shape</legend>
+      <label><input type="radio" name="vidFmt" value="v" checked> Vertical 9:16, for TikTok, Instagram Reels and YouTube Shorts</label>
+      <label><input type="radio" name="vidFmt" value="h"> Landscape 16:9, for YouTube, laptops and presentations</label>
+      <label><input type="checkbox" id="vidCaptions" checked> Show a caption for each step</label>
+    </fieldset>
+    <p class="share-note" id="vidNote"></p>
+    <div class="vid-progress" id="vidProgress" hidden><div id="vidBar"></div></div>
+    <p class="share-msg" id="vidMsg"></p>
+    <div class="top-actions"><button class="btn primary" id="vidGo" type="button">Make video</button></div>
+  </div>
+</div>
 <div class="toast" id="toast" hidden></div>
 <div id="printRoot" aria-hidden="true"></div>
 
@@ -385,6 +412,7 @@ img { max-width: 100%; }
         <label class="dg-inline">Area <input class="input" id="dgAreaInput" placeholder="30x20 m"></label>
         <button class="btn" id="dgPlay" type="button">▶ Play</button>
         <button class="btn" id="dgRestart" type="button" hidden>Restart</button>
+        <button class="btn" id="dgVideo" type="button">Export video</button>
         <label class="dg-inline">Speed <select id="dgSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label>
         <button class="btn" id="dgUndo" type="button">Undo</button>
         <button class="btn danger" id="dgClear" type="button">Clear</button>
@@ -1620,6 +1648,167 @@ async function exportPdf() {
 }
 $("shPdf").addEventListener("click", exportPdf);
 if (!NATIVE) $("shPdf").textContent = "Print or save PDF";
+
+/* ---------- video export: records a drill's animation to a video file ---------- */
+function pickVideoType() {
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) return null;
+  const types = ["video/mp4;codecs=avc1.42E01E", "video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+  return types.find(t => { try { return MediaRecorder.isTypeSupported(t); } catch { return false; } }) || null;
+}
+const VID = { intro: 1200, gap: 450, end: 1800, fps: 30 };
+function videoTimeline(plan, speed) {
+  const ph = plan.phases;
+  const total = VID.intro + ph.reduce((s, p) => s + p.dur / speed, 0) + VID.gap * (ph.length - 1) + VID.end;
+  const at = t => {
+    if (t < VID.intro) return { pi: 0, ms: 0, intro: true };
+    t -= VID.intro;
+    for (let k = 0; k < ph.length; k++) {
+      const dur = ph[k].dur / speed;
+      if (t < dur) return { pi: k, ms: t * speed };
+      t -= dur;
+      if (k < ph.length - 1) { if (t < VID.gap) return { pi: k, ms: ph[k].dur }; t -= VID.gap; }
+    }
+    return { pi: ph.length - 1, ms: ph[ph.length - 1].dur, end: true };
+  };
+  return { total, at };
+}
+function videoLayout(vertical) {
+  return vertical
+    ? { w: 1080, h: 1920, dx: 40, dy: 470, dw: 1000, dh: 667, tx: 64, ty: 150, tw: 952, cy: 1210, cw: 952, title: 84, cap: 52 }
+    : { w: 1920, h: 1080, dx: 56, dy: 60, dw: 1440, dh: 960, tx: 1548, ty: 80, tw: 330, cy: 560, cw: 330, title: 56, cap: 36 };
+}
+async function drawVideoFrame(ctx, L, b, plan, steps, f, captions) {
+  const svg = (`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${L.dw}" height="${L.dh}">` +
+    frameInner(b, plan, f.pi, f.ms) + "</svg>").replace(/var\((--[\w-]+)\)/g, (m, k) => EXPORT_COLORS[k] || "#000");
+  const img = await loadImage("data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg));
+  const F = { body: "Barlow, Arial, sans-serif", disp: '"Barlow Condensed", "Arial Narrow", Arial, sans-serif' };
+  const ink = "#ffffff", muted = "#a9bdb1", accent = "#7fd8a6";
+  ctx.fillStyle = "#10201a"; ctx.fillRect(0, 0, L.w, L.h);
+  ctx.textBaseline = "top";
+  // Phase pill and drill name
+  let y = L.ty;
+  const lab = phaseLabel(b.phase).toUpperCase();
+  ctx.font = `700 ${Math.round(L.title * .36)}px ${F.body}`;
+  const pw = ctx.measureText(lab).width + L.title * .5, ph = L.title * .6;
+  ctx.fillStyle = PHASE_HEX[b.phase] || PHASE_HEX.technical; roundRect(ctx, L.tx, y, pw, ph, ph / 2); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.fillText(lab, L.tx + L.title * .25, y + ph * .2);
+  y += ph + L.title * .35;
+  ctx.font = `700 ${L.title}px ${F.disp}`; ctx.fillStyle = ink;
+  wrapLines(ctx, (b.name || "Untitled drill").toUpperCase(), L.tw).slice(0, 3).forEach(l => { ctx.fillText(l, L.tx, y); y += L.title * 1.02; });
+  y += L.title * .12;
+  const meta = [b.area, b.players, b.minutes ? `${b.minutes} min` : ""].filter(Boolean).join("  ·  ");
+  if (meta) { ctx.font = `500 ${Math.round(L.title * .42)}px ${F.body}`; ctx.fillStyle = muted; wrapLines(ctx, meta, L.tw).slice(0, 2).forEach(l => { y += 6; ctx.fillText(l, L.tx, y); y += L.title * .5; }); }
+  // Diagram
+  ctx.save(); roundRect(ctx, L.dx, L.dy, L.dw, L.dh, 18); ctx.clip(); ctx.drawImage(img, L.dx, L.dy, L.dw, L.dh); ctx.restore();
+  // Caption for the current step
+  if (captions) {
+    let cy = Math.max(L.cy, L.w > L.h ? y + 40 : L.cy);
+    const label = f.intro ? "WATCH THE DRILL" : `STEP ${f.pi + 1} OF ${plan.phases.length}`;
+    ctx.font = `700 ${Math.round(L.cap * .68)}px ${F.body}`; ctx.fillStyle = accent; ctx.fillText(label, L.tx, cy); cy += L.cap * 1.05;
+    const text = f.intro ? (steps.length ? `${steps.length} step${steps.length === 1 ? "" : "s"}. Arrows play in order.` : "") : (steps[f.pi]?.text || "");
+    ctx.font = `600 ${L.cap}px ${F.body}`; ctx.fillStyle = ink;
+    wrapLines(ctx, text, L.cw).slice(0, L.w > L.h ? 8 : 4).forEach(l => { ctx.fillText(l, L.tx, cy); cy += L.cap * 1.25; });
+  }
+  // Watermark
+  ctx.font = `600 ${L.w > L.h ? 26 : 30}px ${F.body}`; ctx.fillStyle = muted;
+  const mark = "Made with Kancha";
+  if (L.w > L.h) ctx.fillText(mark, L.tx, L.h - 80);
+  else ctx.fillText(mark, (L.w - ctx.measureText(mark).width) / 2, L.h - 110);
+}
+async function recordDrillVideo(b, { vertical, captions, speed }, onProgress, signal) {
+  const type = pickVideoType();
+  if (!type) throw { code: "unsupported" };
+  const d = b.diagram, plan = planAnimation(d), steps = stepSummary(d);
+  const tl = videoTimeline(plan, speed), L = videoLayout(vertical);
+  try { await document.fonts?.ready; } catch {}
+  const canvas = document.createElement("canvas");
+  canvas.width = L.w; canvas.height = L.h;
+  canvas.style.cssText = "position:fixed;left:-99999px;top:0;width:10px;height:10px;pointer-events:none";
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext("2d");
+  const stream = canvas.captureStream(VID.fps);
+  const stopAll = () => { stream.getTracks().forEach(t => t.stop()); canvas.remove(); };
+  let rec;
+  try { rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8000000 }); }
+  catch { stopAll(); throw { code: "unsupported" }; }
+  const chunks = [];
+  rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  const stopped = new Promise(res => { rec.onstop = res; });
+  await drawVideoFrame(ctx, L, b, plan, steps, tl.at(0), captions);
+  rec.start(250);
+  const t0 = performance.now();
+  try {
+    for (;;) {
+      if (signal.aborted) throw { code: "cancelled" };
+      const t = performance.now() - t0;
+      if (t >= tl.total) break;
+      await drawVideoFrame(ctx, L, b, plan, steps, tl.at(t), captions);
+      onProgress(t / tl.total);
+      await new Promise(r => setTimeout(r, 1000 / VID.fps));
+    }
+  } catch (e) { rec.stop(); await stopped; stopAll(); throw e; }
+  await drawVideoFrame(ctx, L, b, plan, steps, tl.at(tl.total), captions);
+  await new Promise(r => setTimeout(r, 120));
+  rec.stop(); await stopped; stopAll();
+  onProgress(1);
+  const mime = type.split(";")[0];
+  return { blob: new Blob(chunks, { type: mime }), ext: mime === "video/mp4" ? "mp4" : "webm" };
+}
+let vidAbort = null;
+function videoSpeed() { return Number($("dgSpeed").value) || 1; }
+function openVideo() {
+  const b = dg.block;
+  if (!b?.diagram?.lines?.length) { toast("Draw some arrows first, then export the animation"); return; }
+  stopAnim();
+  const secs = Math.round(videoTimeline(planAnimation(b.diagram), videoSpeed()).total / 1000);
+  $("vidTitle").textContent = b.name || "Untitled drill";
+  $("vidNote").textContent = `The video is about ${secs} seconds long and records in real time, so it takes about ${secs} seconds to make. It uses the speed chosen in the editor (${videoSpeed()}×).`;
+  $("vidMsg").textContent = "";
+  $("vidProgress").hidden = true; $("vidBar").style.width = "0";
+  const ok = !!pickVideoType();
+  $("vidGo").disabled = !ok; $("vidGo").textContent = "Make video";
+  if (!ok) $("vidMsg").textContent = "This browser can't record video. Use the Kancha Mac app, Chrome, Edge or Safari.";
+  $("vid").hidden = false;
+  $("vidGo").focus();
+}
+function closeVideo() {
+  if (vidAbort) vidAbort.abort();
+  $("vid").hidden = true;
+  $("dgVideo").focus();
+}
+$("dgVideo").addEventListener("click", openVideo);
+$("vidClose").addEventListener("click", closeVideo);
+$("vid").addEventListener("click", e => { if (e.target.id === "vid") closeVideo(); });
+document.addEventListener("keydown", e => {
+  if ($("vid").hidden) return;
+  e.stopPropagation();
+  if (e.key === "Escape") { e.preventDefault(); closeVideo(); }
+}, true);
+$("vidGo").addEventListener("click", async () => {
+  if (vidAbort) { vidAbort.abort(); return; }
+  const b = dg.block; if (!b) return;
+  const vertical = document.querySelector('input[name="vidFmt"]:checked')?.value !== "h";
+  vidAbort = new AbortController();
+  $("vidGo").textContent = "Cancel";
+  $("vidProgress").hidden = false; $("vidBar").style.width = "0";
+  $("vidMsg").textContent = "Recording…";
+  try {
+    const { blob, ext } = await recordDrillVideo(b, { vertical, captions: $("vidCaptions").checked, speed: videoSpeed() },
+      k => { $("vidBar").style.width = Math.round(k * 100) + "%"; }, vidAbort.signal);
+    vidAbort = null;
+    $("vidGo").textContent = "Make video";
+    if (!blob.size) throw { code: "empty" };
+    $("vidMsg").textContent = "Saving…";
+    const base = (b.name || "drill").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-").toLowerCase() || "drill";
+    await downloads.save({ filename: `${base}-${vertical ? "vertical" : "landscape"}.${ext}`, data: blob });
+    $("vidMsg").textContent = ext === "mp4" ? "Video saved." : "Video saved as WebM. TikTok and Instagram prefer MP4, so use the Mac app or Safari for those.";
+  } catch (e) {
+    vidAbort = null;
+    $("vidGo").textContent = "Make video";
+    $("vidMsg").textContent = e?.code === "cancelled" ? "Cancelled." : e?.code === "declined" ? "Not saved." :
+      e?.code === "unsupported" ? "This browser can't record video. Use the Kancha Mac app, Chrome, Edge or Safari." : "Couldn't make the video. Try again.";
+  }
+});
 
 /* ---------- share: link that opens the plan on the website ---------- */
 const SITE_URL = "https://luissantori.com/Touchline/";

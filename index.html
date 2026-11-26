@@ -124,6 +124,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .blocks { display: grid; gap: 12px; }
 .block { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 12px; }
 .block-head { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
+.lead { display: inline-flex; align-items: center; gap: 6px; }
+.grip { cursor: grab; color: var(--muted); font-size: 16px; line-height: 1; padding: 2px; border-radius: 4px; user-select: none; -webkit-user-select: none; }
+.grip:hover { background: var(--sunk); color: var(--ink); }
+.block.dragging, .plan-item.dragging, .drill.dragging { opacity: .45; }
+.drop-line { height: 4px; border-radius: 2px; background: var(--accent); margin: -2px 0; pointer-events: none; }
+.drill[draggable="true"] { cursor: grab; }
+.drill[draggable="true"] :is(button, a) { cursor: pointer; }
+.blocks.drop-on .blocks-empty, .tb-group.drop-on, .plan-list.drop-on { outline: 2px dashed var(--accent); outline-offset: 2px; border-radius: 8px; }
+.readonly .grip { display: none; }
 .clock { font: 500 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .phase-select { border: 0; border-radius: 99px; padding: 5px 10px; font: 600 12px var(--body); letter-spacing: .06em; text-transform: uppercase; color: #fff; cursor: pointer; }
 .name-input { border: 0; background: transparent; font: 600 18px var(--body); padding: 4px 2px; min-width: 0; width: 100%; border-bottom: 1px solid transparent; }
@@ -202,7 +211,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .plan-item.active { border-color: var(--accent); }
   .block-body { grid-template-columns: minmax(0, 1fr); }
   .pitch-col { max-width: 440px; }
-  .block-head { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .block-head { grid-template-columns: auto auto minmax(0, 1fr) auto; }
   .block-head .clock { display: none; }
   .block-head .block-actions { grid-column: 1 / -1; justify-content: flex-end; }
   .kit, .block-foot { grid-template-columns: minmax(0, 1fr); }
@@ -737,7 +746,7 @@ function openPlan(id) {
 /* ---------- rendering ---------- */
 function planItem(p, label) {
   const mins = (p.blocks || []).reduce((s, b) => s + (Number(b.minutes) || 0), 0);
-  return `<button type="button" class="plan-item ${p.id === current.id ? "active" : ""}" data-id="${esc(p.id)}">
+  return `<button type="button" class="plan-item ${p.id === current.id ? "active" : ""}" data-id="${esc(p.id)}"${readOnly ? "" : ' draggable="true"'}>
       <strong>${esc(label || "Untitled session")}</strong>
       <small>${esc(fmtDay(p.date))} · ${esc(p.ageGroup || "")} · ${mins} min${p._unsaved ? " · new" : ""}</small></button>`;
 }
@@ -784,7 +793,7 @@ function renderPlanList() {
     const closed = tbClosed.has(k) && !g.items.some(p => p.id === current.id);
     const first = g.items[0].date, last = g.items.at(-1).date;
     const range = first ? (first === last ? fmtDay(first) : `${fmtDay(first)} – ${fmtDay(last)}`) : "";
-    return `<div class="tb-group${closed ? " closed" : ""}">
+    return `<div class="tb-group${closed ? " closed" : ""}" data-drop-prog="${esc(g.name)}">
       <div class="tb-head">
         <button type="button" class="tb-toggle" data-prog="${esc(g.name)}" aria-expanded="${!closed}">
           <strong>${esc(g.name)}</strong><small>${g.items.length} session${g.items.length === 1 ? "" : "s"}${range ? " · " + esc(range) : ""}</small></button>
@@ -1059,13 +1068,13 @@ function renderBlocks() {
         <button class="icon-btn" data-act="down" ${i === current.blocks.length - 1 ? "disabled" : ""} title="Move down" aria-label="Move down">↓</button>
         <button class="icon-btn" data-act="lib" title="Save to my drill library" aria-label="Save to my drill library">☆</button>
         <button class="icon-btn" data-act="dup" title="Duplicate" aria-label="Duplicate">⧉</button>
-        <button class="icon-btn" data-act="del" title="Remove block" aria-label="Remove block">✕</button>`)).join("");
+        <button class="icon-btn" data-act="del" title="Remove block" aria-label="Remove block">✕</button>`, true)).join("");
 }
-function blockCard(b, actions) {
+function blockCard(b, actions, grip) {
   return `
   <article class="block" data-id="${esc(b.id)}">
     <div class="block-head">
-      <span class="clock"></span>
+      <span class="lead">${grip ? '<span class="grip" title="Drag to reorder" aria-hidden="true">⠿</span>' : ""}<span class="clock"></span></span>
       <select class="phase-select" data-f="phase" aria-label="Phase" style="background:${phaseColor(b.phase)}">
         ${PHASES.map(p => `<option value="${p.id}" ${p.id === b.phase ? "selected" : ""}>${p.label}</option>`).join("")}
       </select>
@@ -1156,7 +1165,7 @@ function renderLibrary() {
     const dg = mine ? (hasDiagram(d) ? d.diagram : null) : (LIB_DG[d.name] ? fromNorm(LIB_DG[d.name], d.area) : null);
     const meta = [`${esc(d.minutes)} min`, esc(d.area), esc(d.players)].filter(Boolean).join(" · ");
     return `
-    <div class="drill${mine ? " mine" : ""}">
+    <div class="drill${mine ? " mine" : ""}" draggable="true" data-drag-lib="${i}"${mine ? ' data-drag-mine="1"' : ""} title="Drag into your plan, or press Add">
       <div class="drill-top"><h3><span class="dot" style="background:${phaseColor(d.phase)}"></span>${esc(d.name || "Untitled drill")}${mine ? '<span class="mine-tag">Yours</span>' : ""}</h3>
       <div class="drill-btns">${mine ? `<button class="btn" type="button" data-remove="${i}" title="Remove from your library" aria-label="Remove ${esc(d.name)} from your library">✕</button>` : ""}<button class="btn" type="button" data-add="${i}"${mine ? ' data-mine="1"' : ""}>Add</button></div></div>
       <div class="meta-line">${meta}</div>
@@ -1841,6 +1850,128 @@ $("drillWork").addEventListener("click", e => {
     toast("Made a copy");
   }
 });
+
+/* ---------- drag and drop ---------- */
+let drag = null; // { kind: "block", id } | { kind: "lib", i, mine } | { kind: "plan", id }
+function clearDropMarks() {
+  document.querySelectorAll(".drop-line").forEach(el => el.remove());
+  document.querySelectorAll(".drop-on").forEach(el => el.classList.remove("drop-on"));
+}
+function endDrag() {
+  clearDropMarks();
+  document.querySelectorAll(".dragging").forEach(el => el.classList.remove("dragging"));
+  document.querySelectorAll('.block[draggable="true"]').forEach(el => el.removeAttribute("draggable"));
+  drag = null;
+}
+function startDrag(e, data, el) {
+  drag = data;
+  e.dataTransfer.effectAllowed = data.kind === "lib" ? "copy" : "move";
+  try { e.dataTransfer.setData("text/plain", "kancha"); } catch {}
+  requestAnimationFrame(() => el.classList.add("dragging"));
+}
+// Index in the plan where a drop at this height would land.
+function dropIndex(y) {
+  const cards = [...$("blocks").querySelectorAll(".block")];
+  for (let k = 0; k < cards.length; k++) {
+    const r = cards[k].getBoundingClientRect();
+    if (y < r.top + r.height / 2) return k;
+  }
+  return cards.length;
+}
+function showDropLine(i) {
+  clearDropMarks();
+  const wrap = $("blocks"), cards = wrap.querySelectorAll(".block");
+  if (!cards.length) { wrap.classList.add("drop-on"); return; }
+  const line = document.createElement("div"); line.className = "drop-line";
+  wrap.insertBefore(line, cards[i] || null);
+}
+
+// The grip makes its card draggable only while held, so text in the card can still be selected.
+$("blocks").addEventListener("pointerdown", e => {
+  if (readOnly) return;
+  const g = e.target.closest(".grip"); if (!g) return;
+  g.closest(".block").setAttribute("draggable", "true");
+});
+document.addEventListener("pointerup", () => { if (!drag) document.querySelectorAll('.block[draggable="true"]').forEach(el => el.removeAttribute("draggable")); });
+$("blocks").addEventListener("dragstart", e => {
+  const card = e.target.closest?.('.block[draggable="true"]'); if (!card) return;
+  stopAnim();
+  startDrag(e, { kind: "block", id: card.dataset.id }, card);
+});
+$("libList").addEventListener("dragstart", e => {
+  const card = e.target.closest?.("[data-drag-lib]"); if (!card || readOnly) { e.preventDefault(); return; }
+  startDrag(e, { kind: "lib", i: Number(card.dataset.dragLib), mine: !!card.dataset.dragMine }, card);
+});
+$("blocks").addEventListener("dragover", e => {
+  if (!drag || (drag.kind !== "block" && drag.kind !== "lib")) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = drag.kind === "lib" ? "copy" : "move";
+  showDropLine(dropIndex(e.clientY));
+});
+$("blocks").addEventListener("dragleave", e => { if (!$("blocks").contains(e.relatedTarget)) clearDropMarks(); });
+$("blocks").addEventListener("drop", e => {
+  if (!drag) return;
+  e.preventDefault();
+  let at = dropIndex(e.clientY);
+  const d = drag; endDrag();
+  if (d.kind === "block") {
+    const from = current.blocks.findIndex(b => b.id === d.id); if (from < 0) return;
+    if (at > from) at--;
+    if (at === from) return;
+    const [b] = current.blocks.splice(from, 1);
+    current.blocks.splice(at, 0, b);
+    renderBlocks(); renderTimeline(); renderKit(); renderPlanList(); touch();
+    const el = document.querySelector(`.block[data-id="${b.id}"]`);
+    if (el) { el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 900); }
+    return;
+  }
+  if (d.kind === "lib") {
+    const src = d.mine ? myDrills[d.i] : LIBRARY[d.i]; if (!src) return;
+    const data = d.mine ? JSON.parse(JSON.stringify(src)) : { ...src, diagram: fromNorm(LIB_DG[src.name], src.area) };
+    const b = blockFrom(data);
+    current.blocks.splice(at, 0, b);
+    renderBlocks(); renderTimeline(); renderKit(); renderPlanList(); touch();
+    const el = document.querySelector(`.block[data-id="${b.id}"]`);
+    if (el) { el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 900); }
+    toast(`Added ${src.name || "drill"}`);
+  }
+});
+
+// Sidebar: drag a session onto a training block to move it there, or below the blocks to make it a single session.
+$("planList").addEventListener("dragstart", e => {
+  const it = e.target.closest?.(".plan-item"); if (!it || readOnly) { e.preventDefault(); return; }
+  startDrag(e, { kind: "plan", id: it.dataset.id }, it);
+});
+function planDropTarget(e) {
+  const g = e.target.closest?.(".tb-group");
+  return g ? { el: g, prog: g.dataset.dropProg } : { el: $("planList"), prog: "" };
+}
+$("planList").addEventListener("dragover", e => {
+  if (drag?.kind !== "plan") return;
+  e.preventDefault(); e.dataTransfer.dropEffect = "move";
+  const t = planDropTarget(e);
+  if (!t.el.classList.contains("drop-on")) { clearDropMarks(); t.el.classList.add("drop-on"); }
+});
+$("planList").addEventListener("dragleave", e => { if (!$("planList").contains(e.relatedTarget)) clearDropMarks(); });
+$("planList").addEventListener("drop", e => {
+  if (drag?.kind !== "plan") return;
+  e.preventDefault();
+  const id = drag.id, { prog } = planDropTarget(e);
+  endDrag();
+  movePlanToBlock(id, prog);
+});
+function movePlanToBlock(id, prog) {
+  const isCur = id === current.id;
+  const p = isCur ? current : plans.find(x => x.id === id); if (!p) return;
+  if (progOf(p).toLowerCase() === prog.toLowerCase()) return;
+  p.program = prog;
+  if (isCur) { $("f-program").value = prog; touch(); }
+  else { p.updatedAt = Date.now(); store.save(p); }
+  if (prog) tbClosed.delete(prog.toLowerCase());
+  renderPlanList();
+  toast(prog ? `Moved "${p.title || "Untitled session"}" into ${prog}` : `"${p.title || "Untitled session"}" is now a single session`);
+}
+document.addEventListener("dragend", endDrag);
 
 /* ---------- view-only mode ---------- */
 function lockFields() {
